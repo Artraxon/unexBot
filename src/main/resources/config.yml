@@ -1,0 +1,68 @@
+reddit:
+  subreddit: "UnexBotTest"
+
+  credentials:
+    username: unexBot
+    clientID: YOURID
+    clientSecret: YOURSECRED
+    password: "YOURPASSWORD"
+    operatorUsername: Artraxaron
+    appID: "de.rtrx.a.unexbot"
+
+  submissions:
+    maxTimeDistance: 3600000
+    limit: 30
+    waitIntervall: 5000
+
+  messages:
+    sent:
+      maxTimeDistance: 900000
+      limit: 25
+      waitIntervall: 5000
+      subject: Please explain what is unexpected in your submission
+      body: |
+        Hi, I've noticed you submitted [this](%{Submission}) Submission to r/%{subreddit}.
+
+        Please reply to this message with a short explaination of what is unexpected in your submission.
+        Your reply will be posted by me in the comments section of your post.
+        If you do not reply to this within %{MinutesUntilRemoval} minutes, your post will be deleted.
+        You have a total of %{HoursUntilDrop} hours time to reply and get your post approved, but please note that your post won't be visible if you didn't reply within the %{MinutesUntilRemoval} minutes in the meantime.
+
+        *****
+        BEE-BOOOP I'M A BOT. If you have any questions regarding the moderation guidelines please contact the moderators via modmail.
+        [*Look at my source code on Github and give me a star ;)*](https://coming.com)
+    unread:
+      maxAge: 300000
+      maxTimeDistance: 300000
+      waitIntervall: 5000
+      limit: 25
+
+  scoring:
+    timeUntilRemoval: 60000
+    commentBody: |
+      OP send the following text as an explaination on why this is unexpected:
+
+      *****
+
+      %{Reason}
+
+      *****
+      Is it a good explaination?
+      Then upvote this comment, otherwise downvote it.
+
+      *****
+      BEE-BOOOP I'M A BOT. If you have any questions regarding the moderation guidelines please contact the moderators via modmail.
+
+      [*Look at my source code on Github and give me a star ;)*](https://coming.com)
+
+
+  checks:
+    every: 60000
+    forTimes: 8
+DB:
+  username: unexbot
+  address: localhost
+  db: postgres
+
+Logging:
+  logLevel: INFO
