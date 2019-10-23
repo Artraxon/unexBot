@@ -29,7 +29,6 @@ reddit:
         You have a total of %{HoursUntilDrop} hours time to reply and get your post approved, but please note that your post won't be visible if you didn't reply within the %{MinutesUntilRemoval} minutes in the meantime.
 
         *****
-        BEE-BOOOP I'M A BOT. If you have any questions regarding the moderation guidelines please contact the moderators via modmail.
         [*Look at my source code on Github and give me a star ;)*](https://coming.com)
     unread:
       maxAge: 300000
@@ -44,15 +43,13 @@ reddit:
 
       *****
 
-      %{Reason}
+      [Spoiler](\s %{Reason})
 
       *****
       Is it a good explaination?
       Then upvote this comment, otherwise downvote it.
 
       *****
-      BEE-BOOOP I'M A BOT. If you have any questions regarding the moderation guidelines please contact the moderators via modmail.
-
       [*Look at my source code on Github and give me a star ;)*](https://coming.com)
 
 
@@ -60,9 +57,10 @@ reddit:
     every: 60000
     forTimes: 8
 DB:
+  password: ""
   username: unexbot
   address: localhost
   db: postgres
 
 Logging:
-  logLevel: INFO
+  logLevel: ERROR

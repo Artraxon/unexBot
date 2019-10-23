@@ -5,7 +5,7 @@ import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
  *
  * This generated file contains a sample Kotlin application project to get you started.
  */
-
+project.version = "1.0.1"
 plugins {
     // Apply the Kotlin JVM plugin to add support for Kotlin.
     id("org.jetbrains.kotlin.jvm") version "1.3.41"
@@ -13,6 +13,9 @@ plugins {
     // Apply the application plugin to add support for building a CLI application.
     application
     id("com.github.johnrengelman.shadow") version("5.1.0")
+    id ("com.bmuschko.docker-remote-api") version("5.2.0")
+    id("com.bmuschko.docker-java-application") version "5.2.0"
+
 }
 
 repositories {
@@ -50,3 +53,21 @@ java {
 
 val compileKotlin: KotlinCompile by tasks
 compileKotlin.kotlinOptions.jvmTarget = "1.8"
+
+docker {
+    registryCredentials {
+        val GITHUB_USER: String by project
+        val GITHUB_TOKEN: String by project
+
+        username.set(GITHUB_USER)
+        password.set(GITHUB_TOKEN)
+        url.set("docker.pkg.github.com")
+    }
+
+    javaApplication {
+        ports.set(listOf<Int>())
+        baseImage.set("openjdk:8")
+        maintainer.set("Artraxon a@rtrx.de")
+        tag.set("artraxon/unexbot:${project.version}")
+    }
+}

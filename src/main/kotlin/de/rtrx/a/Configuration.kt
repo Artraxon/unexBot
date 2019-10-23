@@ -5,25 +5,33 @@ import com.uchuhimo.konf.ConfigSpec
 import com.uchuhimo.konf.notEmptyOr
 import com.uchuhimo.konf.source.yaml
 import java.io.File
-import java.nio.file.CopyOption
 import java.nio.file.Files
 import java.nio.file.Paths
 import java.nio.file.StandardCopyOption
+import kotlin.system.exitProcess
 
 
 lateinit var config: Config
 
 fun initConfig(path: String?){
-    config = Config { addSpec(RedditSpec); addSpec(DBSpec); addSpec(LoggingSpec)}.from.yaml.watchFile(
-        run {
-            val filePath = path.orEmpty().notEmptyOr("${System.getProperty("user.dir")}/config.yml")
-            val file = File(filePath)
-            if(file.createNewFile() || Files.size(file.toPath()) == 0L){
-                val inputStream = RedditSpec::class.java.getResourceAsStream("/config.yml")
-                Files.copy(inputStream, Paths.get(filePath), StandardCopyOption.REPLACE_EXISTING )
+    config = Config { addSpec(RedditSpec); addSpec(DBSpec); addSpec(LoggingSpec)}
+            //Adding the config Sources
+            .from.yaml.resource("config.yml")
+            .apply {
+                if(path != null) {
+                    from.yaml.watchFile(
+                            run {
+                                val filePath = path.notEmptyOr("${System.getProperty("user.dir")}/config.yml")
+                                val file = File(filePath)
+                                if (file.createNewFile() || Files.size(file.toPath()) == 0L) {
+                                    val inputStream = RedditSpec::class.java.getResourceAsStream("/config.yml")
+                                    Files.copy(inputStream, Paths.get(filePath), StandardCopyOption.REPLACE_EXISTING)
+                                }
+                                filePath
+                            })
+                }
             }
-            filePath
-        })
+            .from.env()
 }
 
 object RedditSpec: ConfigSpec("reddit") {
@@ -38,57 +46,76 @@ object RedditSpec: ConfigSpec("reddit") {
         val appID by required<String>()
     }
     object submissions : ConfigSpec("submissions"){
-        val maxTimeDistance by optional(60*60*1000L)
-        val limit by optional(25)
-        val waitIntervall by optional(5*1000L)
+        val maxTimeDistance by required<Long>()
+        val limit by required<Int>()
+        val waitIntervall by required<Long>()
     }
 
     object messages: ConfigSpec("messages"){
         object sent: ConfigSpec("sent") {
-            val timeSaved by optional(900 * 1000 * 4L)
-            val maxTimeDistance by optional(15 * 60 * 1000L)
-            val limit by optional(25)
-            val waitIntervall by optional(5*1000L)
-            val subject by optional("Please explain what is unexpected in your submission")
-            val body by optional(
-                    "Hi, I've noticed you submitted [this](%{Submission}) to r/%{subreddit}. \n" +
-                            "Please reply to this message with a short explaination of why your post fits to this subreddit.\n" +
-                            "Your reply will be posted by me in the comments section of your post.\n " +
-                            "If you do not reply to this within %{MinutesUntilRemoval} minutes, your post will be removed" +
-                            "until you provide an explanation.\n" +
-                            "BEE-BOOOP I'M A BOT. If you have any questions regarding the moderation guidelines please contact the moderators via modmail.\n" +
-                            "If you want to learn more about this bot contact /u/Artraxaron, my creator"
-            )
+            val timeSaved by required<Long>()
+            val maxTimeDistance by required<Long>()
+            val limit by required<Int>()
+            val waitIntervall by required<Long>()
+            val subject by required<String>()
+            val body by required<String>()
         }
         object unread: ConfigSpec("unread"){
-            val maxAge by optional(5*60*1000L)
-            val maxTimeDistance by optional(5*60*1000L)
-            val waitIntervall by optional(5000L)
-            val limit by optional(25)
+            val maxAge by required<Long>()
+            val maxTimeDistance by required<Long>()
+            val waitIntervall by required<Long>()
+            val limit by required<Int>()
         }
     }
 
     object scoring: ConfigSpec("scoring"){
-        val timeUntilRemoval by optional(60*1000L)
-        val commentBody by optional("This is why it's supposed to be unexpected: \n %{Reason}")
+        val timeUntilRemoval by required<Long>()
+        val commentBody by required<String>()
     }
 
     object checks: ConfigSpec("checks"){
-        val every by optional(1*60*1000L)
-        val forTimes by optional(8)
+        val every by required<Long>()
+        val forTimes by required<Int>()
     }
 
 }
 
 object DBSpec: ConfigSpec("DB"){
     val username by required<String>()
-    val password by optional("")
+    val password by required<String>()
     val address by required<String>()
     val db by required<String>()
 }
 object LoggingSpec: ConfigSpec("Logging") {
-    val logLevel by optional("ERROR")
+    val logLevel by required<String>()
 }
 
+private val verifyBoolean = { it: String -> if(it == "true" || it == "false") true else false}
+private val convertBoolean = {it: String -> if(it == "true") true else false}
+private val availableOptions: Map<String, Pair<(String)-> Boolean, (String) -> Any>> = mapOf(
+        "createDDL" to (verifyBoolean to convertBoolean),
+        "createDBFunctions" to (verifyBoolean to convertBoolean),
+        "configPath" to ({it: String -> true} to {str: String -> str}),
+        "useDB" to (verifyBoolean to convertBoolean)
+)
+
+fun parseOptions(args: Array<String>): Map<String, Any>{
+    var (pairs, invalids) = args.map { it.split("=") }.partition { it.size == 2 }
+    for(pair in pairs){
+        if(availableOptions.get(pair[0])?.first?.invoke(pair[1])?.not() ?: true){
+            pairs = pairs.minusElement(pair)
+            invalids = pairs.plusElement(pair)
+        }
+    }
+
+    if(invalids.size != 0){
+        for(invalidOption in invalids){
+            println("Invalid Option or Value: $invalidOption")
+        }
+        exitProcess(1)
+    }
+
+    return pairs.map { it[0] to availableOptions[it[0]]!!.second(it[1]) }.toMap()
+}
 
 

@@ -16,8 +16,47 @@ import java.time.ZoneOffset
 import java.util.*
 import kotlin.system.exitProcess
 
-object DB {
-    val connection: Connection = run {
+private var _DB: Linkage? = null
+var DB: Linkage
+    get() = _DB ?: throw UninitializedPropertyAccessException()
+    set(value) {
+        if(_DB == null) _DB = value
+    }
+
+interface Linkage {
+    val connection: Connection
+
+    /**
+     * @return The amount of rows changed in the DB
+     */
+    fun insertSubmission(submission: Submission): Int
+
+    /**
+     * @return whether the check was inserted successfully into the DB or not
+     */
+    fun createCheck(submission_fullname: String, stickied_comment: Comment?, top_comments: Array<Comment>): Boolean
+
+    /**
+     * @return The amount of rows changed in the DB
+     */
+    fun commentMessage(submission_id: String, message: Message, comment: Comment): Int
+}
+
+class DummyLinkage:Linkage {
+    override fun insertSubmission(submission: Submission): Int = 1
+
+    override fun createCheck(submission_fullname: String, stickied_comment: Comment?, top_comments: Array<Comment>) = true
+
+    override fun commentMessage(submission_id: String, message: Message, comment: Comment) = 1
+
+    override val connection: Connection
+        get() = throw DummyException()
+
+    class DummyException: Throwable("Tried to access the sql connection on a dummy")
+}
+
+class PostgresSQLinkage: Linkage {
+    override val connection: Connection = run {
         val properties = Properties()
         properties.put("user", config[DBSpec.username])
         if (config[DBSpec.password].isNotEmpty()){
@@ -34,12 +73,7 @@ object DB {
 
     }
 
-    init {
-
-    }
-
-
-    fun insertSubmission(submission: Submission): Int{
+    override fun insertSubmission(submission: Submission): Int{
         val pst = connection.prepareStatement("INSERT INTO submissions VALUES (?, ?, ?, ?, ?)")
         pst.setString(1, submission.id)
         pst.setString(2, submission.title)
@@ -57,7 +91,7 @@ object DB {
         }
     }
 
-    fun createCheck(submission_fullname: String, stickied_comment: Comment?, top_comments: Array<Comment>): Boolean{
+    override fun createCheck(submission_fullname: String, stickied_comment: Comment?, top_comments: Array<Comment>): Boolean{
         val jsonData = getSubmissionJson(submission_fullname)
         val linkFlairText = jsonData?.get("link_flair_text")?.asStringOrNull()
         val userReports = jsonData?.get("user_reports")?.asJsonArray?.ifEmptyNull()
@@ -99,7 +133,7 @@ object DB {
     }
 
 
-    fun commentMessage(submission_id: String, message: Message, comment: Comment): Int{
+    override fun commentMessage(submission_id: String, message: Message, comment: Comment): Int{
 
         val pst = connection.prepareStatement("SELECT * FROM comment_with_message(?, ?, ?, ?, ?, ?, ?, ?)")
         pst.setString(1, submission_id)
