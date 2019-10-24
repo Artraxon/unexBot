@@ -35,7 +35,7 @@ dependencies {
     implementation( "org.postgresql:postgresql:42.2.8")
     implementation( "com.google.code.gson:gson:2.8.5")
     implementation(group= "org.slf4j", name= "slf4j-api", version= "1.7.28")
-    implementation(group= "org.slf4j", name= "slf4j-simple", version= "1.7.28")
+    implementation(group= "org.slf4j", name= "slf4j-jdk14", version= "1.7.28")
 
     implementation("io.github.microutils:kotlin-logging:1.5.9")
     implementation("com.uchuhimo:konf-core:0.20.0")

@@ -11,9 +11,11 @@ import net.dean.jraw.http.OkHttpNetworkAdapter
 import net.dean.jraw.http.UserAgent
 import net.dean.jraw.oauth.Credentials
 import net.dean.jraw.oauth.OAuthHelper
+import java.lang.Exception
 import java.lang.System.exit
 import kotlin.concurrent.thread
 
+private val logger = KotlinLogging.logger {  }
 @ExperimentalCoroutinesApi
 fun main(args: Array<String>) {
     Runtime.getRuntime().addShutdownHook(thread(false) {
@@ -21,7 +23,7 @@ fun main(args: Array<String>) {
     })
     val options = parseOptions(args)
     initConfig(options.get("configPath") as String?)
-    println("Logging at LogLevel ${logger.logLevel}")
+    println(config[RedditSpec.credentials.clientID])
 
     if((options.get("useDB") as Boolean?) ?: true){
         DB = PostgresSQLinkage()
@@ -54,19 +56,16 @@ val reddit: RedditClient by lazy {
 
     val userAgent = UserAgent("linux", config[RedditSpec.credentials.appID], "0.9", config[RedditSpec.credentials.operatorUsername])
 
-    try {
-        val reddit = OAuthHelper.automatic(OkHttpNetworkAdapter(userAgent), oauthCreds)
+
+    val reddit = try {
+        OAuthHelper.automatic(OkHttpNetworkAdapter(userAgent), oauthCreds)
     } catch (e: Throwable){
         logger.error { "An exception was raised while trying to authenticate. Are your credentials correct?" }
         exit(1)
+        throw Exception()
     }
     reddit.logHttp = false
     return@lazy reddit
-}
-
-val logger by lazy {
-    System.setProperty(org.slf4j.impl.SimpleLogger.DEFAULT_LOG_LEVEL_KEY, config[LoggingSpec.logLevel])
-    KotlinLogging.logger { }
 }
 
 suspend fun wait(){

@@ -17,19 +17,20 @@ fun initConfig(path: String?){
     config = Config { addSpec(RedditSpec); addSpec(DBSpec); addSpec(LoggingSpec)}
             //Adding the config Sources
             .from.yaml.resource("config.yml")
-            .apply {
+            .run {
                 if(path != null) {
                     from.yaml.watchFile(
                             run {
                                 val filePath = path.notEmptyOr("${System.getProperty("user.dir")}/config.yml")
                                 val file = File(filePath)
                                 if (file.createNewFile() || Files.size(file.toPath()) == 0L) {
+                                    println("Cloning Config...")
                                     val inputStream = RedditSpec::class.java.getResourceAsStream("/config.yml")
                                     Files.copy(inputStream, Paths.get(filePath), StandardCopyOption.REPLACE_EXISTING)
                                 }
                                 filePath
                             })
-                }
+                } else this
             }
             .from.env()
 }
@@ -65,6 +66,7 @@ object RedditSpec: ConfigSpec("reddit") {
             val maxTimeDistance by required<Long>()
             val waitIntervall by required<Long>()
             val limit by required<Int>()
+            val answerMaxCharacters by required<Int>()
         }
     }
 

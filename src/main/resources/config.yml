@@ -16,6 +16,7 @@ reddit:
 
   messages:
     sent:
+      timeSaved: 600000
       maxTimeDistance: 900000
       limit: 25
       waitIntervall: 5000
@@ -26,7 +27,8 @@ reddit:
         Please reply to this message with a short explaination of what is unexpected in your submission.
         Your reply will be posted by me in the comments section of your post.
         If you do not reply to this within %{MinutesUntilRemoval} minutes, your post will be deleted.
-        You have a total of %{HoursUntilDrop} hours time to reply and get your post approved, but please note that your post won't be visible if you didn't reply within the %{MinutesUntilRemoval} minutes in the meantime.
+        You have a total of %{HoursUntilDrop} hours time to reply and get your post approved,
+        but please note that your post won't be visible in the meantime if you didn't reply within the %{MinutesUntilRemoval} minutes.
 
         *****
         [*Look at my source code on Github and give me a star ;)*](https://coming.com)
@@ -35,19 +37,18 @@ reddit:
       maxTimeDistance: 300000
       waitIntervall: 5000
       limit: 25
+      answerMaxCharacters: 500
 
   scoring:
     timeUntilRemoval: 60000
     commentBody: |
-      OP send the following text as an explaination on why this is unexpected:
+      **OP send the following text as an explaination on why this is unexpected:**
+
+      %{Reason}
 
       *****
-
-      [Spoiler](\s %{Reason})
-
-      *****
-      Is it a good explaination?
-      Then upvote this comment, otherwise downvote it.
+      **Is it a good post?**
+      **Then upvote this comment, otherwise downvote it.**
 
       *****
       [*Look at my source code on Github and give me a star ;)*](https://coming.com)
@@ -61,6 +62,3 @@ DB:
   username: unexbot
   address: localhost
   db: postgres
-
-Logging:
-  logLevel: ERROR

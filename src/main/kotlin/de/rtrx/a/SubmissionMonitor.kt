@@ -6,6 +6,7 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.ReceiveChannel
 import kotlinx.coroutines.selects.select
+import mu.KotlinLogging
 import net.dean.jraw.models.*
 import net.dean.jraw.references.CommentsRequest
 import net.dean.jraw.references.SubmissionReference
@@ -13,6 +14,8 @@ import java.util.concurrent.ConcurrentHashMap
 
 @ExperimentalCoroutinesApi
 class SubmissionMonitor(filteredInboxChannel: ReceiveChannel<Pair<SubmissionReference, Message>>) {
+
+    private val logger = KotlinLogging.logger {  }
     /**
      * Uses the Fullname of the submission as the key for the deferred comment
      */
@@ -124,7 +127,7 @@ class SubmissionMonitor(filteredInboxChannel: ReceiveChannel<Pair<SubmissionRefe
                             subject = messageSubject,
                             body = messageBody
                                     .replace("%{Submission}", submission.permalink)
-                                    .replace("%{HoursUntilDrop}", (config[RedditSpec.messages.sent.timeSaved] / (1000 * 60 * 60)).toString())
+                                    .replace("%{HoursUntilDrop}", (config[RedditSpec.messages.sent.timeSaved] / (1000 * 60 * 60F)).toString())
                                     .replace("%{subreddit}", config[RedditSpec.subreddit])
                                     .replace("%{MinutesUntilRemoval}", (config[RedditSpec.scoring.timeUntilRemoval] / (1000 * 60)).toString())
                     )
@@ -152,7 +155,9 @@ class SubmissionMonitor(filteredInboxChannel: ReceiveChannel<Pair<SubmissionRefe
             for ((submission, message) in messageChannel) {
                 try {
                     logger.trace { "Creating comment for and approving post ${submission.id}" }
-                    val comment = submission.reply(commentBody.replace("%{Reason}", message.body))
+                    val comment = submission
+                            .reply(commentBody.replace("%{Reason}",
+                                    message.body.take(config[RedditSpec.messages.unread.answerMaxCharacters])))
                     val commentRef = comment.toReference(reddit)
                     commentRef.distinguish(DistinguishedStatus.MODERATOR, true)
 
@@ -208,5 +213,16 @@ class SubmissionMonitor(filteredInboxChannel: ReceiveChannel<Pair<SubmissionRefe
         }
         jobs.add(job)
         return job
+    }
+
+    fun unignoreReports(fullname: String){
+        val response = reddit.request {
+            it.url("https://oauth.reddit.com/api/unignore_reports").post(
+                    mapOf( "id" to fullname )
+            )
+        }
+        if(response.successful.not()){
+            logger.warn { "couldn't unignore reports from post ${fullname}" }
+        }
     }
 }

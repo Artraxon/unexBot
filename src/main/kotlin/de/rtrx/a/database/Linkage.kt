@@ -3,6 +3,7 @@ package de.rtrx.a.database
 import com.google.gson.JsonArray
 import com.google.gson.JsonElement
 import de.rtrx.a.*
+import mu.KotlinLogging
 import net.dean.jraw.models.Comment
 import net.dean.jraw.models.Message
 import net.dean.jraw.models.Submission
@@ -56,6 +57,7 @@ class DummyLinkage:Linkage {
 }
 
 class PostgresSQLinkage: Linkage {
+    private val logger = KotlinLogging.logger {  }
     override val connection: Connection = run {
         val properties = Properties()
         properties.put("user", config[DBSpec.username])
@@ -83,10 +85,10 @@ class PostgresSQLinkage: Linkage {
         return try {
             pst.executeUpdate()
         } catch (ex: SQLException){
-            if(ex.message?.contains("""unique constraint "submission_id"""") ?: false)1
+            if(ex.message?.contains("""unique constraint "submission_id"""") ?: false)0
             else {
                 logger.error { "SQL Exception: ${ex.message}" }
-                0
+                1
             }
         }
     }

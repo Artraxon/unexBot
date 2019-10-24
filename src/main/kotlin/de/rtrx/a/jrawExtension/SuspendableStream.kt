@@ -2,10 +2,10 @@ package de.rtrx.a.jrawExtension
 
 import de.rtrx.a.RedditSpec
 import de.rtrx.a.config
-import de.rtrx.a.logger
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.ReceiveChannel
+import mu.KotlinLogging
 import net.dean.jraw.models.Created
 import net.dean.jraw.models.UniquelyIdentifiable
 import net.dean.jraw.pagination.BackoffStrategy
@@ -22,6 +22,7 @@ class SuspendableStream<out T> @JvmOverloads constructor(
     val ageLimit: Long = config[RedditSpec.submissions.maxTimeDistance]
 ) : Iterator<T?> where T: UniquelyIdentifiable, T: Created {
 
+    private val logger = KotlinLogging.logger {  }
     /** Keeps track of the uniqueIds we've seen recently */
     private val history = RotatingSearchList<String>(historySize)
     private var currentIterator: Iterator<T>? = null
@@ -88,6 +89,7 @@ fun <T> Paginator<T>.subscribe(
     coroutineScope: CoroutineScope = CoroutineScope(Dispatchers.Default),
     ageLimit: Long = 1000 * 60 * 60 * 4
 ): Pair<Job, ReceiveChannel<T>> where T: UniquelyIdentifiable, T: Created  {
+    val logger = KotlinLogging.logger {  }
     val channel = Channel<T>(capacity = Channel.UNLIMITED)
     val job =  coroutineScope.launch {
         while(isActive) {

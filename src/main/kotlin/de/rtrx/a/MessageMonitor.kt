@@ -5,6 +5,7 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.ReceiveChannel
 import kotlinx.coroutines.selects.select
+import mu.KotlinLogging
 import net.dean.jraw.models.Message
 import net.dean.jraw.references.SubmissionReference
 import java.util.concurrent.ConcurrentHashMap
@@ -13,6 +14,7 @@ import java.util.concurrent.ConcurrentHashMap
 @ExperimentalCoroutinesApi
 class MessageMonitor {
 
+    private val logger = KotlinLogging.logger {  }
 
     private val savingMessagesScope = CoroutineScope(Dispatchers.Default)
 

@@ -19,16 +19,6 @@ fun getSubmissionJson(fullname: String): JsonObject?  {
     } else null
 }
 
-fun unignoreReports(fullname: String){
-    val response = reddit.request {
-        it.url("https://oauth.reddit.com/api/unignore_reports").post(
-            mapOf( "id" to fullname )
-        )
-    }
-    if(response.successful.not()){
-        logger.warn { "couldn't unignore reports from post ${fullname}" }
-    }
-}
 
 fun <R, T> ConcurrentHashMap<R, CompletableDeferred<T>>.access(key: R): CompletableDeferred<T>{
     return getOrPut(key, { CompletableDeferred() })

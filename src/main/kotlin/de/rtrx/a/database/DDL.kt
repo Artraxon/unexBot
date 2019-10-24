@@ -2,7 +2,7 @@ package de.rtrx.a.database
 
 import de.rtrx.a.RedditSpec
 import de.rtrx.a.config
-import de.rtrx.a.logger
+import mu.KotlinLogging
 import java.io.InputStreamReader
 import java.sql.PreparedStatement
 import java.sql.SQLException
@@ -30,6 +30,7 @@ object DDL {
     }
 }
 class SQLScript(val content: String){
+    private val logger = KotlinLogging.logger {  }
     lateinit var statements: List<PreparedStatement>
 
     fun prepareStatements(){
