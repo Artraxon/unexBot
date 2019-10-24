@@ -21,6 +21,7 @@ fun main(args: Array<String>) {
     })
     val options = parseOptions(args)
     initConfig(options.get("configPath") as String?)
+    println("Logging at LogLevel ${logger.logLevel}")
 
     if((options.get("useDB") as Boolean?) ?: true){
         DB = PostgresSQLinkage()

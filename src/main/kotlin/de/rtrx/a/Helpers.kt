@@ -3,6 +3,7 @@ package de.rtrx.a
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import kotlinx.coroutines.CompletableDeferred
+import mu.KLogger
 import java.util.concurrent.ConcurrentHashMap
 
 
@@ -31,4 +32,12 @@ fun unignoreReports(fullname: String){
 
 fun <R, T> ConcurrentHashMap<R, CompletableDeferred<T>>.access(key: R): CompletableDeferred<T>{
     return getOrPut(key, { CompletableDeferred() })
+}
+
+val KLogger.logLevel: String get() {
+    return if (isErrorEnabled) "ERROR"
+    else if (isWarnEnabled) "WARN"
+    else if (isInfoEnabled) "INFO"
+    else if (isDebugEnabled) "DEBUG"
+    else "TRACE"
 }
