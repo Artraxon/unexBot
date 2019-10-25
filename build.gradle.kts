@@ -5,7 +5,7 @@ import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
  *
  * This generated file contains a sample Kotlin application project to get you started.
  */
-project.version = "1.0.4"
+project.version = "1.0.5"
 plugins {
     // Apply the Kotlin JVM plugin to add support for Kotlin.
     id("org.jetbrains.kotlin.jvm") version "1.3.41"
