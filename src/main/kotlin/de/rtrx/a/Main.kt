@@ -23,7 +23,6 @@ fun main(args: Array<String>) {
     })
     val options = parseOptions(args)
     initConfig(options.get("configPath") as String?)
-    println(config[RedditSpec.credentials.clientID])
 
     if((options.get("useDB") as Boolean?) ?: true){
         DB = PostgresSQLinkage()

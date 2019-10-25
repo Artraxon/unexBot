@@ -127,7 +127,7 @@ class SubmissionMonitor(filteredInboxChannel: ReceiveChannel<Pair<SubmissionRefe
                             subject = messageSubject,
                             body = messageBody
                                     .replace("%{Submission}", submission.permalink)
-                                    .replace("%{HoursUntilDrop}", (config[RedditSpec.messages.sent.timeSaved] / (1000 * 60 * 60F)).toString())
+                                    .replace("%{HoursUntilDrop}", (config[RedditSpec.messages.sent.timeSaved] / (1000 * 60 * 60)).toString())
                                     .replace("%{subreddit}", config[RedditSpec.subreddit])
                                     .replace("%{MinutesUntilRemoval}", (config[RedditSpec.scoring.timeUntilRemoval] / (1000 * 60)).toString())
                     )
