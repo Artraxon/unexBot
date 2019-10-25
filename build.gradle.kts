@@ -55,6 +55,7 @@ val compileKotlin: KotlinCompile by tasks
 compileKotlin.kotlinOptions.jvmTarget = "1.8"
 
 docker {
+
     registryCredentials {
         val GITHUB_USER: String by project
         val GITHUB_TOKEN: String by project
@@ -68,6 +69,6 @@ docker {
         ports.set(listOf<Int>())
         baseImage.set("openjdk:8")
         maintainer.set("Artraxon a@rtrx.de")
-        tag.set("artraxon/unexbot:${project.version}")
+        tag.set("docker.pkg.github.com/artraxon/unexbot/full-image:${project.version}")
     }
 }
