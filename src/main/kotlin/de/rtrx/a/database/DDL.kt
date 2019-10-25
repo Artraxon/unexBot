@@ -10,6 +10,7 @@ import java.sql.SQLException
 val ddlFilePath = "/DDL.sql"
 
 object DDL {
+    private val logger = KotlinLogging.logger {  }
     fun init(createDDL: Boolean, createFunctions: Boolean){
         if(createDDL){
             val reader = InputStreamReader(DDL.javaClass.getResourceAsStream(ddlFilePath))
@@ -25,7 +26,13 @@ object DDL {
                 statements = listOf(commentIfNotExists, commentWithMessage, createCheck, redditUsername)
             }
 
-            statements.forEach { DB.connection.prepareStatement(it).execute() }
+            statements.forEach {
+                try {
+                    DB.connection.prepareStatement(it).execute()
+                }catch (e: SQLException){
+                    logger.error { "Something went wrong when creating function $it:\n${e.message}" }
+                }
+            }
         }
     }
 }
