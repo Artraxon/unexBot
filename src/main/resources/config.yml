@@ -16,7 +16,7 @@ reddit:
 
   messages:
     sent:
-      timeSaved: 600000
+      timeSaved: 7200000
       maxTimeDistance: 900000
       limit: 25
       waitIntervall: 5000
@@ -31,16 +31,15 @@ reddit:
         but please note that your post won't be visible in the meantime if you didn't reply within the %{MinutesUntilRemoval} minutes.
 
         *****
-        [*Look at my source code on Github and give me a star ;)*](https://coming.com)
+        [*Look at my source code on Github and give me a star ;)*](https://github.com/Artraxon/unexBot)
     unread:
-      maxAge: 300000
       maxTimeDistance: 300000
       waitIntervall: 5000
       limit: 25
       answerMaxCharacters: 500
 
   scoring:
-    timeUntilRemoval: 60000
+    timeUntilRemoval: 600000
     commentBody: |
       **OP send the following text as an explaination on why this is unexpected:**
 
@@ -51,7 +50,7 @@ reddit:
       **Then upvote this comment, otherwise downvote it.**
 
       *****
-      [*Look at my source code on Github and give me a star ;)*](https://coming.com)
+      [*Look at my source code on Github and give me a star ;)*](https://github.com/Artraxon/unexBot)
 
 
   checks:

@@ -69,8 +69,6 @@ class MessageMonitor {
         println("starting to filter messages")
         val channel = Channel<Pair<SubmissionReference, Message>>(Channel.UNLIMITED)
 
-        val maxAge = config[RedditSpec.messages.unread.maxAge]
-        val maxTimeDistance = config[RedditSpec.messages.unread.maxTimeDistance]
         val usedUsername = config[RedditSpec.credentials.username]
 
         val job = launch {
@@ -84,13 +82,9 @@ class MessageMonitor {
                         launch {
                             val parent = waitForParent(parentFullname)
                             if (parent != null && parent.author == usedUsername) {
-                                if (maxTimeDistance < message.created.time - parent.created.time) {
-                                    logger.info("Dropping message with ID ${message.id} because the reply was to late")
-                                } else {
-                                    val submission = extractSubmission(parent)
-                                    if (submission != null) {
-                                        channel.send(submission to message)
-                                    }
+                                val submission = extractSubmission(parent)
+                                if (submission != null) {
+                                    channel.send(submission to message)
                                 }
                             }
 

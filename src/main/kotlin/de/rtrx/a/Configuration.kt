@@ -63,7 +63,6 @@ object RedditSpec: ConfigSpec("reddit") {
         }
         object unread: ConfigSpec("unread"){
             val maxAge by required<Long>()
-            val maxTimeDistance by required<Long>()
             val waitIntervall by required<Long>()
             val limit by required<Int>()
             val answerMaxCharacters by required<Int>()
