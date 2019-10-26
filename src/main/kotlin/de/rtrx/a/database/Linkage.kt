@@ -2,6 +2,7 @@ package de.rtrx.a.database
 
 import com.google.gson.JsonArray
 import com.google.gson.JsonElement
+import com.google.gson.JsonObject
 import de.rtrx.a.*
 import mu.KotlinLogging
 import net.dean.jraw.models.Comment
@@ -35,18 +36,22 @@ interface Linkage {
     /**
      * @return whether the check was inserted successfully into the DB or not
      */
-    fun createCheck(submission_fullname: String, stickied_comment: Comment?, top_comments: Array<Comment>): Boolean
+    fun createCheck(data: JsonObject, stickied_comment: Comment?, top_comments: Array<Comment>): Boolean
 
     /**
      * @return The amount of rows changed in the DB
      */
     fun commentMessage(submission_id: String, message: Message, comment: Comment): Int
+
+    fun createCheck(submission_fullname: String, stickied_comment: Comment?, top_comments: Array<Comment>): Boolean {
+        return createCheck(getSubmissionJson(submission_fullname)!!, stickied_comment, top_comments)
+    }
 }
 
 class DummyLinkage:Linkage {
     override fun insertSubmission(submission: Submission): Int = 1
 
-    override fun createCheck(submission_fullname: String, stickied_comment: Comment?, top_comments: Array<Comment>) = true
+    override fun createCheck(data: JsonObject, stickied_comment: Comment?, top_comments: Array<Comment>) = true
 
     override fun commentMessage(submission_id: String, message: Message, comment: Comment) = 1
 
@@ -93,8 +98,9 @@ class PostgresSQLinkage: Linkage {
         }
     }
 
-    override fun createCheck(submission_fullname: String, stickied_comment: Comment?, top_comments: Array<Comment>): Boolean{
-        val jsonData = getSubmissionJson(submission_fullname)
+    override fun createCheck(jsonData: JsonObject, stickied_comment: Comment?, top_comments: Array<Comment>): Boolean{
+        val submission_fullname = jsonData.get("name")?.asString ?: return false
+
         val linkFlairText = jsonData?.get("link_flair_text")?.asStringOrNull()
         val userReports = jsonData?.get("user_reports")?.asJsonArray?.ifEmptyNull()
         val userReportsDismissed = jsonData?.get("user_reports_dimissed")?.asJsonArray?.ifEmptyNull()

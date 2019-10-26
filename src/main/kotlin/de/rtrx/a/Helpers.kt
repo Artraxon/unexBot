@@ -6,7 +6,7 @@ import kotlinx.coroutines.CompletableDeferred
 import mu.KLogger
 import java.util.concurrent.ConcurrentHashMap
 
-
+class ResponseBodyEmptyException(fullname: String): Exception("Response body from fetching informations about $fullname is empty")
 fun getSubmissionJson(fullname: String): JsonObject?  {
     val response = reddit.request {
         it.url("https://oauth.reddit.com/api/info.json?id=$fullname")
@@ -16,7 +16,7 @@ fun getSubmissionJson(fullname: String): JsonObject?  {
             if (it.asJsonArray.size() == 0) null
             else it.asJsonArray[0].asJsonObject["data"].asJsonObject
         }
-    } else null
+    } else throw ResponseBodyEmptyException(fullname)
 }
 
 

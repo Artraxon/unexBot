@@ -194,13 +194,23 @@ class SubmissionMonitor(filteredInboxChannel: ReceiveChannel<Pair<SubmissionRefe
                                 approvedPosts.access(submission.fullName).onAwait { it }
                                 onTimeout(timeUntilSubRemoval) { null }
                             }
-                            DB.createCheck(submission.fullName, null, emptyArray())
+                            val submissionData = try {
+                               getSubmissionJson(submission.fullName)!!.also {
+                                   DB.createCheck(it, null, emptyArray())
+                               }
+                            } catch (e: Throwable){
+                                logger.error { e.message }
+                                null
+                            }
+
                             approvedPosts.remove(submission.fullName)
 
-                            if (comment == null) {
+                            //Post shouldn't be deleted if they were approved by a moderator
+                            if (comment == null && submissionData?.get("approved")?.asBoolean?.not() ?: true) {
                                 submission.toReference(reddit).remove()
                                 logger.info { ("Post ${submission.id} was deleted") }
                             }
+
                         } catch (e: Throwable) {
                             logger.error { "An exception was raised while deleting submission ${submission.id}:\n" +
                                     e.message.toString()
