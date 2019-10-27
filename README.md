@@ -39,7 +39,7 @@ The bot uses three sources for values. The values of the first one are overwritt
 
 1. The default configuration file included in the jar (and also found in this repository as "config.yml")
 2. Your config file, for which you have specified the path with the command line option "configPath"
-3. Environment variables. Is useful for both docker and debugging. To set a variable use a dot to separate the node names (e.g. "reddit.credentials.username")
+3. Environment variables. This is useful for both configuring the docker image and debugging. To set a variable use a dot to separate the node names (e.g. "reddit.credentials.username")
 
 ### Logging
 Per Default the slf4j java logging library is included, but feel free to swap it out. You will then have to configure the underlying logger according to your needs.
