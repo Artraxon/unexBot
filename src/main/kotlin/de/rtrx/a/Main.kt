@@ -28,7 +28,7 @@ fun main(args: Array<String>) {
         DB = PostgresSQLinkage()
         DDL.init(
                 createDDL = (options.get("createDDL") as Boolean?) ?: true,
-                createFunctions = (options.get("createDBFunctions") as Boolean?) ?: false
+                createFunctions = (options.get("createDBFunctions") as Boolean?) ?: true
         )
     } else DB = DummyLinkage()
 
