@@ -3,8 +3,9 @@ A small bot for Reddit that filters out (some) of the rubbish and collects data 
 
 ## What does this bot do?
 1. When a post is submitted to a subreddit, the user is messaged asking him to answer back with a sum-up of his content.
-2.1 If the user answers within a small time frame, then the post stays up and the reply is posted in a stickied comment below the post.
-2.2 If the user doesn't answer within this time frame, then the post is deleted. The user has another window of time to reply and restore the post. Replying after this time window is passed will do ... nothing
+2. Does the user answer quickly?
+    1. If the user answers within a small time frame, then the post stays up and the reply is posted in a stickied comment below the post.
+    2. If the user doesn't answer within this time frame, then the post is deleted. The user has another window of time to reply and restore the post. Replying after this time window is passed will do ... nothing
 3. Now for a fixed amount, the bot creates a snapshot of the post, including the score of the post, the score of the stickied comment, if it was removed or deleted, user reports, top comments and so on and saves them in a database. Then the bot waits for a fixed amount of time.
 
 ## How do I use it?
