@@ -8,7 +8,7 @@ A small bot for Reddit that filters out (some) of the rubbish and collects data 
 3. Now for a fixed amount, the bot creates a snapshot of the post, including the score of the post, the score of the stickied comment, if it was removed or deleted, user reports, top comments and so on and saves them in a database. Then the bot waits for a fixed amount of time.
 
 ## How do I use it?
-There are both a docker image and a fat-jar (a jar that includes all dependencies) available. You can also build the fat-jar on your own using
+There are both a docker image and a fat-jar (a jar that includes all dependencies) available. You can also build the fat-jar on your own using 
 ```bash
 gradle shadowJar
 ```
@@ -17,7 +17,7 @@ or if you want to create the docker image run while having the docker daemon run
 ```bash
 gradle dockerBuildImage
 ```
-
+You'll need gradle with a version > 5.
 ### Command Line Options
 There are currently 4 command line options available:
 
