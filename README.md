@@ -6,7 +6,7 @@ A small bot for Reddit that filters out (some) of the rubbish and collects data 
 2. Does the user answer quickly?
     1. If the user answers within a small time frame, then the post stays up and the reply is posted in a stickied comment below the post.
     2. If the user doesn't answer within this time frame, then the post is deleted. The user has another window of time to reply and restore the post. Replying after this time window is passed will do ... nothing
-3. Now for a fixed amount, the bot creates a snapshot of the post, including the score of the post, the score of the stickied comment, if it was removed or deleted, user reports, top comments and so on and saves them in a database. Then the bot waits for a fixed amount of time.
+3. The bot creates a snapshot of the post, including the score of the post, the score of the stickied comment, if it was removed or deleted, user reports, top comments and so on and saves them in a database. Then the bot waits for a fixed amount of time and repeats everything for a set amount of times.
 
 ## How do I use it?
 There are both a docker image and a fat-jar (a jar that includes all dependencies) available. You can also build the fat-jar on your own using 
