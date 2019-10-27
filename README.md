@@ -42,7 +42,7 @@ The bot uses three sources for values. The values of the first one are overwritt
 3. Environment variables. This is useful for both configuring the docker image and debugging. To set a variable use a dot to separate the node names (e.g. "reddit.credentials.username")
 
 ### Logging
-Per Default the slf4j java logging library is included, but feel free to swap it out. You will then have to configure the underlying logger according to your needs.
+Per Default the slf4j java.util logging library is included, but feel free to swap it out. You will then have to configure the underlying logger according to your needs.
 
 ## Credits
 This Programm uses different Libraries:
