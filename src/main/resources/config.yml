@@ -1,5 +1,5 @@
 reddit:
-  subreddit: "UnexBotTest"
+  subreddit: "YourSubreddit"
 
   credentials:
     username: unexBot
@@ -24,7 +24,7 @@ reddit:
       body: |
         Hi, I've noticed you submitted [this](%{Submission}) Submission to r/%{subreddit}.
 
-        Please reply to this message with a short explaination of what is unexpected in your submission.
+        Please reply to this message with a short explanation of what is unexpected in your submission.
         Your reply will be posted by me in the comments section of your post.
         If you do not reply to this within %{MinutesUntilRemoval} minutes, your post will be deleted.
         You have a total of %{HoursUntilDrop} hours time to reply and get your post approved,
@@ -41,7 +41,7 @@ reddit:
   scoring:
     timeUntilRemoval: 600000
     commentBody: |
-      **OP sent the following text as an explaination on why this is unexpected:**
+      **OP sent the following text as an explanation on why this is unexpected:**
 
       %{Reason}
 
