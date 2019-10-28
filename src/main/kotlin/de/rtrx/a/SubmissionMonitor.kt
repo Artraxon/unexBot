@@ -38,9 +38,7 @@ class SubmissionMonitor(filteredInboxChannel: ReceiveChannel<Pair<SubmissionRefe
 
     private val sendMessagesScope = CoroutineScope(Dispatchers.Default)
     val sendMessages = sendMessagesScope.sendMessages(
-        submissions,
-        config[RedditSpec.messages.sent.subject],
-        config[RedditSpec.messages.sent.body]
+        submissions
     )
 
     private val postDeletionsScope = CoroutineScope(Dispatchers.Default)
@@ -51,8 +49,7 @@ class SubmissionMonitor(filteredInboxChannel: ReceiveChannel<Pair<SubmissionRefe
 
     private val postApprovalScope = CoroutineScope(Dispatchers.Default)
     val stickiedComments = postApprovalScope.approvePosts(
-        filteredInboxChannel,
-        config[RedditSpec.scoring.commentBody]
+        filteredInboxChannel
     )
 
     private val monitorScope = CoroutineScope(Dispatchers.Default)
@@ -112,9 +109,7 @@ class SubmissionMonitor(filteredInboxChannel: ReceiveChannel<Pair<SubmissionRefe
 
     @kotlinx.coroutines.ExperimentalCoroutinesApi
     fun CoroutineScope.sendMessages(
-        incomingPosts: ReceiveChannel<Submission>,
-        messageSubject: String,
-        messageBody: String
+        incomingPosts: ReceiveChannel<Submission>
     ): ReceiveChannel<Submission> {
         val channel = Channel<Submission>(capacity = Channel.UNLIMITED)
         val job = launch {
@@ -124,8 +119,8 @@ class SubmissionMonitor(filteredInboxChannel: ReceiveChannel<Pair<SubmissionRefe
                     logger.trace { ("received new submission with title ${submission.title}") }
                     reddit.me().inbox().compose(
                             dest = submission.author,
-                            subject = messageSubject,
-                            body = messageBody
+                            subject = config[RedditSpec.messages.sent.subject],
+                            body = config[RedditSpec.messages.sent.body]
                                     .replace("%{Submission}", submission.permalink)
                                     .replace("%{HoursUntilDrop}", (config[RedditSpec.messages.sent.timeSaved] / (1000 * 60 * 60)).toString())
                                     .replace("%{subreddit}", config[RedditSpec.subreddit])
@@ -146,8 +141,7 @@ class SubmissionMonitor(filteredInboxChannel: ReceiveChannel<Pair<SubmissionRefe
 
     @kotlinx.coroutines.ExperimentalCoroutinesApi
     fun CoroutineScope.approvePosts(
-        messageChannel: ReceiveChannel<Pair<SubmissionReference, Message>>,
-        commentBody: String
+        messageChannel: ReceiveChannel<Pair<SubmissionReference, Message>>
     ): ReceiveChannel<Pair<SubmissionReference, Comment>> {
         println("starting to approve posts")
         val channel = Channel<Pair<SubmissionReference, Comment>>()
@@ -156,7 +150,7 @@ class SubmissionMonitor(filteredInboxChannel: ReceiveChannel<Pair<SubmissionRefe
                 try {
                     logger.trace { "Creating comment for and approving post ${submission.id}" }
                     val comment = submission
-                            .reply(commentBody.replace("%{Reason}",
+                            .reply(config[RedditSpec.scoring.commentBody].replace("%{Reason}",
                                     message.body.take(config[RedditSpec.messages.unread.answerMaxCharacters])))
                     val commentRef = comment.toReference(reddit)
                     commentRef.distinguish(DistinguishedStatus.MODERATOR, true)
