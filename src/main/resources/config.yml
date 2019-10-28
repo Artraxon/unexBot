@@ -41,7 +41,7 @@ reddit:
   scoring:
     timeUntilRemoval: 600000
     commentBody: |
-      **OP send the following text as an explaination on why this is unexpected:**
+      **OP sent the following text as an explaination on why this is unexpected:**
 
       %{Reason}
 
