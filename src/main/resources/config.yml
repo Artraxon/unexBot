@@ -43,7 +43,7 @@ reddit:
     commentBody: |
       **OP sent the following text as an explanation on why this is unexpected:**
 
-      %{Reason}
+      >!%{Reason}!<
 
       *****
       **Is it a good post?**
