@@ -12,13 +12,14 @@ A small bot for Reddit that filters out (some) of the rubbish and collects data 
 
 ## How do I use it?
 
-There are both a docker image and a fat-jar (a jar that includes all dependencies) available. You can also build the fat-jar on your own using 
+There are both a docker image and a fat-jar (a jar that includes all dependencies) available. You can also build the fat-jar on your own using:
 
 ```bash
 gradle shadowJar
 ```
 
-or if you want to create the docker image run while having the docker daemon running (and having access to it)
+or if you want to create the docker image run while having the docker daemon running (and having access to it):
+
 ```bash
 gradle dockerBuildImage
 ```
@@ -53,21 +54,17 @@ The bot uses three sources for values. The values of the first one are overwritt
 
 ### Logging
 
-The slf4j java.util logging library is included by default, but feel free to swap it out. You will then have to configure the underlying logger according to your needs.
+The SLF4J java.util logging library is included by default, but feel free to swap it out. You will then have to configure the underlying logger according to your needs.
 
 ## Credits
 
-This Programm uses different Libraries:
+This program uses different libraries:
 
 - [JRAW](https://github.com/mattbdean/JRAW) is probably the most important one. I even stole an 1 and a halve class from it (Rotating Search List and SuspendableStream), since the original implementation blocks the thread. Maybe someday I will find the time to create a pull request to JRAW to include this (or create my own fork of it and properly integrate it)
-- slf4j for logging
-- Gson for parsing some data since I'm to stupid to change the appropriate classes of JRAW
-- [Kotlin Logging](https://github.com/MicroUtils/kotlin-logging) A wrapper around slf4j (which itself is a wrapper around a logging backend)
-- [Konf](https://github.com/uchuhimo/konf) For the configuration system
-- The postgresql JDBC Driver
-- [Docker Gradle Plugin](https://github.com/bmuschko/gradle-docker-plugin) pretty amazing stuff if you ask me!
-- [Docker Shadow Plugin](https://github.com/johnrengelman/shadow) To create Fat jars
-
-
-
-
+- SLF4J for logging
+- [Gson](https://github.com/google/gson): For parsing some data since I'm to stupid to change the appropriate classes of JRAW.
+- [Kotlin Logging](https://github.com/MicroUtils/kotlin-logging): A wrapper around SLF4J (which itself is a wrapper around a logging backend).
+- [Konf](https://github.com/uchuhimo/konf): For the configuration system.
+- [The PostgreSQL JDBC Driver](https://jdbc.postgresql.org).
+- [Docker Gradle Plugin](https://github.com/bmuschko/gradle-docker-plugin): Pretty amazing stuff if you ask me!
+- [Docker Shadow Plugin](https://github.com/johnrengelman/shadow): To create Fat jars.
