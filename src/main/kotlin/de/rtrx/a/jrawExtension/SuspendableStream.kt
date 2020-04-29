@@ -1,7 +1,6 @@
 package de.rtrx.a.jrawExtension
 
 import de.rtrx.a.RedditSpec
-import de.rtrx.a.config
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.ReceiveChannel
@@ -19,7 +18,7 @@ class SuspendableStream<out T> @JvmOverloads constructor(
     private val dataSource: RedditIterable<T>,
     private val backoff: BackoffStrategy = ConstantBackoffStrategy(),
     historySize: Int = 200,
-    val ageLimit: Long = config[RedditSpec.submissions.maxTimeDistance]
+    val ageLimit: Long
 ) : Iterator<T?> where T: UniquelyIdentifiable, T: Created {
 
     private val logger = KotlinLogging.logger {  }

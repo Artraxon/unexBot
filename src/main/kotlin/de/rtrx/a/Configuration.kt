@@ -11,10 +11,8 @@ import java.nio.file.StandardCopyOption
 import kotlin.system.exitProcess
 
 
-lateinit var config: Config
-
-fun initConfig(path: String?){
-    config = Config { addSpec(RedditSpec); addSpec(DBSpec); addSpec(LoggingSpec)}
+fun initConfig(path: String?): Config{
+    return Config { addSpec(RedditSpec); addSpec(DBSpec); addSpec(LoggingSpec)}
             //Adding the config Sources
             .from.yaml.resource("config.yml")
             .run {
@@ -35,6 +33,7 @@ fun initConfig(path: String?){
             .from.env()
 }
 
+
 object RedditSpec: ConfigSpec("reddit") {
     val subreddit by required<String>()
 
@@ -52,7 +51,7 @@ object RedditSpec: ConfigSpec("reddit") {
         val waitIntervall by required<Long>()
     }
 
-    object messages: ConfigSpec("messages"){
+    object messages : ConfigSpec("messages") {
         object sent: ConfigSpec("sent") {
             val timeSaved by required<Long>()
             val maxTimeDistance by required<Long>()
@@ -61,13 +60,15 @@ object RedditSpec: ConfigSpec("reddit") {
             val subject by required<String>()
             val body by required<String>()
         }
+
         object unread: ConfigSpec("unread"){
-            val maxAge by required<Long>()
+            val maxTimeDistance by required<Long>()
             val waitIntervall by required<Long>()
             val limit by required<Int>()
             val answerMaxCharacters by required<Int>()
         }
     }
+
 
     object scoring: ConfigSpec("scoring"){
         val timeUntilRemoval by required<Long>()
@@ -75,8 +76,12 @@ object RedditSpec: ConfigSpec("reddit") {
     }
 
     object checks: ConfigSpec("checks"){
-        val every by required<Long>()
-        val forTimes by required<Int>()
+        object DB: ConfigSpec("db"){
+            val every by required<Long>()
+            val forTimes by required<Int>()
+            val comments_amount by required<Int>()
+            val depth by required<Int>()
+        }
     }
 
 }
@@ -97,7 +102,8 @@ private val availableOptions: Map<String, Pair<(String)-> Boolean, (String) -> A
         "createDDL" to (verifyBoolean to convertBoolean),
         "createDBFunctions" to (verifyBoolean to convertBoolean),
         "configPath" to ({it: String -> true} to {str: String -> str}),
-        "useDB" to (verifyBoolean to convertBoolean)
+        "useDB" to (verifyBoolean to convertBoolean),
+        "startDispatcher" to (verifyBoolean to convertBoolean)
 )
 
 fun parseOptions(args: Array<String>): Map<String, Any>{

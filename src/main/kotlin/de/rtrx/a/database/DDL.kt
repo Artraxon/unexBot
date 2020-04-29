@@ -1,79 +1,58 @@
 package de.rtrx.a.database
 
+import com.uchuhimo.konf.Config
 import de.rtrx.a.RedditSpec
-import de.rtrx.a.config
 import mu.KotlinLogging
 import java.io.InputStreamReader
 import java.sql.PreparedStatement
 import java.sql.SQLException
+import javax.inject.Inject
 
 val ddlFilePath = "/DDL.sql"
 
-object DDL {
+class DDL @Inject constructor( private val config: Config, private val db: Linkage){
     private val logger = KotlinLogging.logger {  }
     fun init(createDDL: Boolean, createFunctions: Boolean){
         if(createDDL){
-            val reader = InputStreamReader(DDL.javaClass.getResourceAsStream(ddlFilePath))
-            val script = SQLScript(reader.readText())
+            logger.info("Creating the DDL")
+            val reader = InputStreamReader(DDL::class.java.getResourceAsStream(ddlFilePath))
+            val script = SQLScript(reader.readText(), db)
             reader.close()
 
             script.prepareStatements()
             script.executeStatements()
         }
         if(createFunctions){
-            lateinit var statements: List<String>
-            with(SQLFunctions){
-                statements = listOf(commentIfNotExists, commentWithMessage, createCheck, redditUsername)
-            }
+            logger.info("Creating DB Functions")
+            val statements: List<String> = listOf(commentIfNotExists, commentWithMessage, createCheck, redditUsername, addParentIfNotExists)
 
             statements.forEach {
                 try {
-                    DB.connection.prepareStatement(it).execute()
+                    db.connection.prepareStatement(it).execute()
                 }catch (e: SQLException){
                     logger.error { "Something went wrong when creating function $it:\n${e.message}" }
                 }
             }
         }
     }
-}
-class SQLScript(val content: String){
-    private val logger = KotlinLogging.logger {  }
-    lateinit var statements: List<PreparedStatement>
 
-    fun prepareStatements(){
-        statements = content.split(";").fold(emptyList<PreparedStatement>()) {prev, str ->
-            prev + DB.connection.prepareStatement(str)
-        }
-    }
-
-    fun executeStatements(){
-        statements.forEach {
-            try {
-                it.execute()
-            }catch (ex: SQLException) {
-                logger.error { "During DDL init: ${ex.message}" }
-            }
-        }
-    }
-}
-
-object SQLFunctions {
-    val commentIfNotExists = """
+    private val commentIfNotExists = """
         create function comment_if_not_exists(comment_id text, body text, created timestamp with time zone, author text)
           returns void
         language plpgsql
         as $$
         DECLARE
-        test comments%ROWTYPE;
         BEGIN
             IF NOT EXISTS(SELECT * FROM comments WHERE comments.id = comment_id) THEN
               INSERT INTO comments VALUES(comment_id, body, created, author);
+              RETURN true;
             end if;
+            RETURN false;
         end;
         $$;
         """.trimIndent()
 
-    val commentWithMessage = """
+    private val commentWithMessage = """
         create function comment_with_message(submission_id text, message_id text, comment_id text, message_body text, comment_body text, author_id text, comment_time timestamp with time zone, message_time timestamp with time zone)
           returns void
         language plpgsql
@@ -87,7 +66,7 @@ object SQLFunctions {
         $$;
         """.trimIndent()
 
-    val createCheck = """
+    private val createCheck = """
         create function create_check(submission_id text, tmptz timestamp with time zone, user_reports json, user_reports_dismissed json, is_deleted boolean, submission_score integer, removed_by text, flair text, current_sticky text, unexscore integer, top_posts_id text[], top_posts_score integer[])
         returns void
         language plpgsql
@@ -96,7 +75,7 @@ object SQLFunctions {
         BEGIN
           INSERT INTO public."check" VALUES (${'$'}1, ${'$'}2, ${'$'}3, ${'$'}4, ${'$'}5, ${'$'}6, ${'$'}7, ${'$'}8, ${'$'}9);
           INSERT INTO public.unex_score VALUES (${'$'}1, ${'$'}2, ${'$'}10);
-          FOR i in 1..10
+          FOR i in 1.. array_upper(top_posts_id, 1)
           LOOP
             IF top_posts_id[i] IS NULL THEN
               EXIT;
@@ -107,7 +86,24 @@ object SQLFunctions {
        $$;
         """.trimIndent()
 
-    val redditUsername = """
+    private val addParentIfNotExists = """
+        create function comment_if_not_exists(comment_id text, body text, created timestamp with time zone, author text) returns boolean
+            language plpgsql
+        as
+        ${'$'}${'$'}
+        DECLARE
+        BEGIN
+            IF NOT EXISTS(SELECT * FROM comments WHERE comments.id = comment_id) THEN
+              INSERT INTO comments VALUES(comment_id, body, created, author);
+              RETURN true;
+            end if;
+            RETURN false;
+        end;
+        ${'$'}${'$'};
+
+    """.trimIndent()
+
+    private val  redditUsername = """
         create function reddit_username()
           returns text
         language sql
@@ -116,3 +112,25 @@ object SQLFunctions {
         $$;
         """.trimIndent()
 }
+class SQLScript(val content: String, private val db: Linkage){
+    private val logger = KotlinLogging.logger {  }
+    lateinit var statements: List<PreparedStatement>
+
+    fun prepareStatements(){
+        statements = content.split(";").fold(emptyList<PreparedStatement>()) {prev, str ->
+            prev + db.connection.prepareStatement(str)
+        }
+    }
+
+    fun executeStatements(){
+        statements.forEach {
+            try {
+                it.execute()
+            }catch (ex: SQLException) {
+                logger.error { "During DDL init: ${ex.message}" }
+            }
+        }
+    }
+
+}
+

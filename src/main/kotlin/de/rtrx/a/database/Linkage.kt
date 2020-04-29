@@ -3,8 +3,11 @@ package de.rtrx.a.database
 import com.google.gson.JsonArray
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
+import com.google.inject.Inject
+import com.uchuhimo.konf.Config
 import de.rtrx.a.*
 import mu.KotlinLogging
+import net.dean.jraw.RedditClient
 import net.dean.jraw.models.Comment
 import net.dean.jraw.models.Message
 import net.dean.jraw.models.Submission
@@ -18,12 +21,6 @@ import java.time.ZoneOffset
 import java.util.*
 import kotlin.system.exitProcess
 
-private var _DB: Linkage? = null
-var DB: Linkage
-    get() = _DB ?: throw UninitializedPropertyAccessException()
-    set(value) {
-        if(_DB == null) _DB = value
-    }
 
 interface Linkage {
     val connection: Connection
@@ -36,24 +33,59 @@ interface Linkage {
     /**
      * @return whether the check was inserted successfully into the DB or not
      */
-    fun createCheck(data: JsonObject, stickied_comment: Comment?, top_comments: Array<Comment>): Boolean
+    fun createCheck(submission_fullname: String, botComment: Comment?, stickied_comment: Comment?, top_comments: Array<Comment>): Pair<Boolean, List<Comment>> {
+        return createCheck(getSubmissionJson(submission_fullname), botComment, stickied_comment, top_comments)
+    }
+
+    fun getSubmissionJson(submissionFullname: String): JsonObject
+
+
+    fun createCheckSelectValues(
+            submission_fullname: String,
+            botComment: Comment?,
+            stickied_comment: Comment?,
+            top_comments: Array<Comment>,
+            predicate: (JsonObject) -> Boolean
+    ): Boolean {
+        return try {
+            val json = getSubmissionJson(submission_fullname)
+            if(predicate(json)) this.createCheck(json, botComment, stickied_comment, top_comments).first
+            else false
+        } catch (e: Throwable) {
+            KotlinLogging.logger {  }.error { e.message }
+            false
+        }
+    }
 
     /**
      * @return The amount of rows changed in the DB
      */
     fun commentMessage(submission_id: String, message: Message, comment: Comment): Int
 
-    fun createCheck(submission_fullname: String, stickied_comment: Comment?, top_comments: Array<Comment>): Boolean {
-        return createCheck(getSubmissionJson(submission_fullname)!!, stickied_comment, top_comments)
-    }
+
+    fun createCheck(jsonData: JsonObject, botComment: Comment?, stickied_comment: Comment?, top_comments: Array<Comment>): Pair<Boolean, List<Comment>>
+
+    fun add_parent(child: Comment, parent: Comment): Boolean
 }
 
 class DummyLinkage:Linkage {
     override fun insertSubmission(submission: Submission): Int = 1
 
-    override fun createCheck(data: JsonObject, stickied_comment: Comment?, top_comments: Array<Comment>) = true
+    override fun createCheck(
+            data: JsonObject,
+            botComment: Comment?,
+            stickied_comment: Comment?,
+            top_comments: Array<Comment>
+    ): Pair<Boolean, List<Comment>> = true to emptyList()
+
+    override fun getSubmissionJson(submissionFullname: String): JsonObject {
+        return JsonObject()
+    }
 
     override fun commentMessage(submission_id: String, message: Message, comment: Comment) = 1
+    override fun add_parent(child: Comment, parent: Comment): Boolean {
+        return true
+    }
 
     override val connection: Connection
         get() = throw DummyException()
@@ -61,7 +93,7 @@ class DummyLinkage:Linkage {
     class DummyException: Throwable("Tried to access the sql connection on a dummy")
 }
 
-class PostgresSQLinkage: Linkage {
+class PostgresSQLinkage @Inject constructor(private val redditClient: RedditClient, private val config: Config): Linkage {
     private val logger = KotlinLogging.logger {  }
     override val connection: Connection = run {
         val properties = Properties()
@@ -70,11 +102,11 @@ class PostgresSQLinkage: Linkage {
             properties.put("password", config[DBSpec.password])
         }
         try {
-            Class.forName("org.postgresql.Driver").newInstance()
+            Class.forName("org.postgresql.Driver").getDeclaredConstructor().newInstance()
             DriverManager.getConnection("jdbc:postgresql://${config[DBSpec.address]}/${config[DBSpec.db]}", properties)
         } catch (ex: Exception) {
-            println("Something went wrong when trying to connect to the db")
-            ex.printStackTrace()
+            logger.error {"Something went wrong when trying to connect to the db" }
+            logger.error { ex.getStackTraceString() }
             exitProcess(1)
         }
 
@@ -98,16 +130,16 @@ class PostgresSQLinkage: Linkage {
         }
     }
 
-    override fun createCheck(jsonData: JsonObject, stickied_comment: Comment?, top_comments: Array<Comment>): Boolean{
-        val submission_fullname = jsonData.get("name")?.asString ?: return false
+    override fun createCheck(jsonData: JsonObject, botComment: Comment?, stickied_comment: Comment?, topComments: Array<Comment>): Pair<Boolean, List<Comment>>{
+        val submission_fullname = jsonData.get("name")?.asString ?: return false to emptyList()
 
-        val linkFlairText = jsonData?.get("link_flair_text")?.asStringOrNull()
-        val userReports = jsonData?.get("user_reports")?.asJsonArray?.ifEmptyNull()
-        val userReportsDismissed = jsonData?.get("user_reports_dimissed")?.asJsonArray?.ifEmptyNull()
-        val deleted = jsonData?.get("author")?.asStringOrNull() == "[deleted]"
-        val removedBy = jsonData?.get("banned_by")?.asStringOrNull()
-        val score = jsonData?.get("score")?.asInt
-        val unexScore = if(stickied_comment != null)(reddit.lookup(stickied_comment.fullName)[0] as Comment).score else null
+        val linkFlairText = jsonData.get("link_flair_text")?.asStringOrNull()
+        val userReports = jsonData.get("user_reports")?.asJsonArray?.ifEmptyNull()
+        val userReportsDismissed = jsonData.get("user_reports_dimissed")?.asJsonArray?.ifEmptyNull()
+        val deleted = jsonData.get("author")?.asStringOrNull() == "[deleted]"
+        val removedBy = jsonData.get("banned_by")?.asStringOrNull()
+        val score = jsonData.get("score")?.asInt
+        val unexScore = if(botComment != null)(redditClient.lookup(botComment.fullName)[0] as Comment).score else null
 
         val pst = connection.prepareStatement("SELECT * FROM create_check(?, ?, (to_json(?::json)), (to_json(?::json)), ?, ?, ?, ?, ?, ?, ?, ?)")
         pst.setString(1, submission_fullname.drop(3))
@@ -120,25 +152,35 @@ class PostgresSQLinkage: Linkage {
         pst.setString(8, linkFlairText)
         pst.setString(9, stickied_comment?.id)
         unexScore?.also { pst.setInt(10, unexScore) } ?: pst.setNull(10, Types.INTEGER)
-        pst.setObject(11, top_comments.map { it.id }.toTypedArray())
-        pst.setArray(12, connection.createArrayOf("INTEGER", top_comments.map { it.score }.toTypedArray()))
+        pst.setObject(11, topComments.map { it.id }.toTypedArray())
+        pst.setArray(12, connection.createArrayOf("INTEGER", topComments.map { it.score }.toTypedArray()))
 
         val commentsPst = connection.prepareStatement("SELECT * FROM comment_if_not_exists(?, ?, ?, ?)")
-        top_comments.forEach { comment ->
+        val createdComments = topComments.mapNotNull { comment ->
             commentsPst.setString(1, comment.id)
             commentsPst.setString(2, comment.body)
             commentsPst.setObject(3, comment.created.toOffsetDateTime())
             commentsPst.setString(4, comment.author)
-            commentsPst.execute()
+            try {
+                commentsPst.execute()
+                val resultSet = commentsPst.resultSet
+                resultSet.next()
+                if(resultSet.getBoolean(1)) comment else null
+            } catch (ex: SQLException) {
+                logger.error { ex.getStackTraceString() }
+                null
+            }
         }
 
         return try {
-            pst.execute()
+            pst.execute() to createdComments
         } catch (ex: SQLException){
-            println(ex.message)
-            false
+            logger.error { (ex.message) }
+            false to createdComments
         }
     }
+
+    override fun getSubmissionJson(submissionFullname: String) = redditClient.getSubmissionJson(submissionFullname)
 
 
     override fun commentMessage(submission_id: String, message: Message, comment: Comment): Int{
@@ -157,11 +199,24 @@ class PostgresSQLinkage: Linkage {
             pst.execute()
             1
         } catch (ex: SQLException){
-            println(ex.message)
+            logger.error { (ex.message) }
             0
         }
 
 
+    }
+
+    override fun add_parent(child: Comment, parent: Comment): Boolean {
+        val pst = connection.prepareStatement("SELECT * FROM add_parent_if_not_exists(?, ?)")
+        pst.setString(1, child.id)
+        pst.setString(2, parent.id)
+        return try {
+            pst.execute()
+            true
+        } catch (ex: SQLException){
+            logger.error { ex.message }
+            false
+        }
     }
 
 }

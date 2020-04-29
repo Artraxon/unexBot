@@ -1,0 +1,68 @@
+flow:
+  init:
+    !!newPost
+    returns:
+      post: newPost
+  - step:
+      !!messageWithReply
+      messageBody: "Please answer, you submitted %{newPost.url}"
+      messageSubject: "Important Message"
+      returns:
+        reply: explanation
+  - step:
+      !!postComment
+      trigger:
+        !!varFullfilled
+        toFullfill: explanation
+      commentBody: "This is the explanation %{explanation}"
+      returns:
+        comment: unexComment
+  - step: &DB
+      trigger: time
+      wait: 0
+      action: DB
+      botComment: unexComment
+  - step: &check
+      trigger: time
+      wait: 15
+      unit: minutes
+      action: check
+      checks:
+        - var: commentScore
+          maxValue: -10
+          with:
+            comment: unexComment
+        - var: scorePost
+          minValue: 100
+      do:
+        - action: increaseVar
+          var: deletionCounter
+  - step: &delete
+      trigger: time
+      wait: 0
+      action: check
+      checks:
+        - var: deletionCounter
+          minValue: 3
+      do:
+        - action: removePost
+
+  - step: *DB
+    -
+  - step: *check
+  - steop: *delete
+  - step: *DB
+    -
+  - step: *check
+  - steop: *delete
+  - step: *DB
+
+  - step: *check
+  - steop: *delete
+  - step: *DB
+
+  - step: *check
+  - steop: *delete
+  - step: *DB
+
+

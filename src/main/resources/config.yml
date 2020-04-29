@@ -54,8 +54,12 @@ reddit:
 
 
   checks:
-    every: 60000
-    forTimes: 8
+    db:
+      every: 60000
+      forTimes: 8
+      comments_amount: 20
+      depth: 10
+
 DB:
   password: ""
   username: unexbot

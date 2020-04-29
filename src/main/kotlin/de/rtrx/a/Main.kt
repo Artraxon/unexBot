@@ -1,77 +1,34 @@
 package de.rtrx.a
 
-import de.rtrx.a.database.DB
+import com.google.inject.Guice
+import com.google.inject.internal.cglib.proxy.`$Dispatcher`
 import de.rtrx.a.database.DDL
-import de.rtrx.a.database.DummyLinkage
-import de.rtrx.a.database.PostgresSQLinkage
+import de.rtrx.a.flow.FlowDispatcherInterface
+import de.rtrx.a.flow.FlowModule
+import de.rtrx.a.unex.UnexFlowDispatcher
 import kotlinx.coroutines.*
 import mu.KotlinLogging
-import net.dean.jraw.RedditClient
-import net.dean.jraw.http.OkHttpNetworkAdapter
-import net.dean.jraw.http.UserAgent
-import net.dean.jraw.oauth.Credentials
-import net.dean.jraw.oauth.OAuthHelper
-import java.lang.Exception
-import java.lang.System.exit
 import kotlin.concurrent.thread
 
 private val logger = KotlinLogging.logger {  }
 @ExperimentalCoroutinesApi
 fun main(args: Array<String>) {
-    Runtime.getRuntime().addShutdownHook(thread(false) {
-        runBlocking { stop() }
-    })
     val options = parseOptions(args)
-    initConfig(options.get("configPath") as String?)
-
-    if((options.get("useDB") as Boolean?) ?: true){
-        DB = PostgresSQLinkage()
-        DDL.init(
-                createDDL = (options.get("createDDL") as Boolean?) ?: true,
-                createFunctions = (options.get("createDBFunctions") as Boolean?) ?: true
-        )
-    } else DB = DummyLinkage()
-
-    runBlocking {
-
-        val messageMonitor = MessageMonitor()
-        val submissionMonitor = SubmissionMonitor(messageMonitor.filteredInbox)
-
-        wait()
-    }
-
-}
-
-
-val jobs = mutableListOf<Job>()
-val reddit: RedditClient by lazy {
-
-    val oauthCreds = Credentials.script(
-        config[RedditSpec.credentials.username],
-        config[RedditSpec.credentials.password],
-        config[RedditSpec.credentials.clientID],
-        config[RedditSpec.credentials.clientSecret]
+    val injector = Guice.createInjector(FlowModule(options))
+    injector.getInstance(DDL::class.java).init(
+            createDDL = (options.get("createDDL") as Boolean?) ?: true,
+            createFunctions = (options.get("createDBFunctions") as Boolean?) ?: true
     )
-
-    val userAgent = UserAgent("linux", config[RedditSpec.credentials.appID], "0.9", config[RedditSpec.credentials.operatorUsername])
-
-
-    val reddit = try {
-        OAuthHelper.automatic(OkHttpNetworkAdapter(userAgent), oauthCreds)
-    } catch (e: Throwable){
-        logger.error { "An exception was raised while trying to authenticate. Are your credentials correct?" }
-        exit(1)
-        throw Exception()
+    if(!((options.get("startDispatcher") as Boolean?) ?:true)) {
+        logger.info { "Exiting before starting dispatcher" }
+        return
     }
-    reddit.logHttp = false
-    return@lazy reddit
+
+    val dispatcher: UnexFlowDispatcher = injector.getInstance(UnexFlowDispatcher::class.java)
+    Runtime.getRuntime().addShutdownHook(thread(false) {
+        runBlocking { dispatcher.stop() }
+        logger.info { "Stopping Bot" }
+    })
 }
 
-suspend fun wait(){
-    joinAll(*jobs.toTypedArray())
-}
-
-suspend fun stop(){
-    jobs.forEach { it.cancelAndJoin() }
-}
-
+class ApplicationStoppedException: CancellationException("Application was stopped")
