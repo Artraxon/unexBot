@@ -31,7 +31,7 @@ reddit:
         but please note that your post won't be visible in the meantime if you didn't reply within the %{MinutesUntilRemoval} minutes.
 
         *****
-        [*Look at my source code on Github and give me a star ;)*](https://github.com/Artraxon/unexBot)
+        [*Look at my source code on GitHub and give me a star ;)*](https://github.com/Artraxon/unexBot)
     unread:
       maxTimeDistance: 300000
       waitIntervall: 5000
