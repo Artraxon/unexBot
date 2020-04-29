@@ -38,7 +38,7 @@ class DDL @Inject constructor( private val config: Config, private val db: Linka
 
     private val commentIfNotExists = """
         create function comment_if_not_exists(comment_id text, body text, created timestamp with time zone, author text)
-          returns void
+          returns boolean
         language plpgsql
         as $$
         DECLARE
