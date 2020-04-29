@@ -55,7 +55,7 @@ reddit:
 
   checks:
     db:
-      every: 60000
+      every: 600000
       forTimes: 8
       comments_amount: 20
       depth: 10
