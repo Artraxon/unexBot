@@ -40,6 +40,7 @@ class DBCheck(
                     //Pulls comments until the value specified in the configuration is reached or no more comments can be found
                     var newComments: List<ReplyCommentNode>? = null
                     while (size < config[RedditSpec.checks.DB.comments_amount] && newComments?.isNotEmpty() ?: true) {
+                        delay(config[RedditSpec.checks.DB.commentWaitIntervall])
                         newComments = replaceMore(redditClient)
                         size += newComments.size
                     }

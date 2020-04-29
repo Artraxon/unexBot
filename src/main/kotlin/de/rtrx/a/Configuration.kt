@@ -81,6 +81,7 @@ object RedditSpec: ConfigSpec("reddit") {
             val forTimes by required<Int>()
             val comments_amount by required<Int>()
             val depth by required<Int>()
+            val commentWaitIntervall by required<Long>()
         }
     }
 

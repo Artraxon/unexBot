@@ -59,6 +59,7 @@ reddit:
       forTimes: 8
       comments_amount: 20
       depth: 10
+      commentWaitIntervall: 10000
 
 DB:
   password: ""
