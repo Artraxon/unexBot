@@ -1,6 +1,6 @@
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
-project.version = "2.1.1"
+project.version = "2.1.8"
 plugins {
     id("org.jetbrains.kotlin.jvm") version "1.3.41"
 
@@ -73,6 +73,8 @@ docker {
     }
 
     javaApplication {
+        //TODO Find a better way to configure logging
+        //this.jvmArgs.set(listOf("-Djava.util.logging.config.file=/app/resources/logging.properties]"))
         ports.set(listOf<Int>())
         baseImage.set("openjdk:8")
         maintainer.set("Artraxon a@rtrx.de")

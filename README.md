@@ -34,7 +34,7 @@ There are currently 4 command line options available:
 - `createDDL` (boolean): Whether you want the bot to run the commands to create the tables in the database. Default is true. This options just exists because the error messages can be a bit annoying.
 - `createDBFunctions` (boolean): Same like createDDL, but has even more annoying error messages.
 - `configPath` (string): If you don't want to configure everything via environment variables, this should be set to the location of your config file. If no file is found at the given path, the default one will be copied there.
-- `startDispatcher` (boolean): Whether the Bot should actually start working. The intended purpose is that you can create the DDL and SQL Functions without starting the bot.-
+- `startDispatcher` (boolean): Whether the Bot should actually start working. The intended purpose is that you can create the DDL and SQL Functions without starting the bot. It's also the only way to make the program exit with 2.
 
 This would tell the bot to not create the DDL or functions and use the config file called "unexbotConfig.yml" in the same directory:
 
