@@ -21,14 +21,19 @@ fun main(args: Array<String>) {
     )
     if(!((options.get("startDispatcher") as Boolean?) ?:true)) {
         logger.info { "Exiting before starting dispatcher" }
-        return
+        System.exit(2)
     }
 
     val dispatcher: UnexFlowDispatcher = injector.getInstance(UnexFlowDispatcher::class.java)
+
     Runtime.getRuntime().addShutdownHook(thread(false) {
         runBlocking { dispatcher.stop() }
         logger.info { "Stopping Bot" }
     })
+
+    runBlocking {
+        dispatcher.join()
+    }
 }
 
 class ApplicationStoppedException: CancellationException("Application was stopped")

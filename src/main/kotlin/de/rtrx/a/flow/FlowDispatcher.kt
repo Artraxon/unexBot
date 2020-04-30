@@ -24,6 +24,7 @@ interface FlowDispatcherInterface<T: Flow> {
     fun unsubscribe(flow: T, type: EventType<*>)
     fun getCreatedFlows(): ReceiveChannel<T>
     suspend fun stop()
+    suspend fun join()
 }
 
 interface IFlowDispatcherStub<T: Flow, F: FlowFactory<T, *>>: FlowDispatcherInterface<T>{
@@ -82,6 +83,10 @@ class FlowDispatcherStub<T: Flow, M: Any, F: FlowFactory<T, M>> @Inject construc
 
     override suspend fun stop() {
         job.cancel(ApplicationStoppedException())
+        job.join()
+    }
+
+    override suspend fun join() {
         job.join()
     }
 
