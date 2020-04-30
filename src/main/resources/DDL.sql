@@ -119,4 +119,15 @@ create table if not exists unex_score
 )
 ;
 
+create table comments_hierarchy
+(
+    child_id  text not null
+        constraint comments_hierarchy_pk
+            primary key
+        constraint comment_child
+            references comments,
+    parent_id text not null
+        constraint parent_comment
+            references comments
+);
 
