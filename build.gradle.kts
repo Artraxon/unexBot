@@ -1,6 +1,6 @@
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
-project.version = "2.1.8"
+project.version = "2.1.9"
 plugins {
     id("org.jetbrains.kotlin.jvm") version "1.3.41"
 
@@ -8,6 +8,7 @@ plugins {
     id("com.github.johnrengelman.shadow") version("5.1.0")
     id ("com.bmuschko.docker-remote-api") version("5.2.0")
     id("com.bmuschko.docker-java-application") version "5.2.0"
+    `maven-publish`
 
 }
 
@@ -79,5 +80,27 @@ docker {
         baseImage.set("openjdk:8")
         maintainer.set("Artraxon a@rtrx.de")
         tag.set("docker.pkg.github.com/artraxon/unexbot/full-image:${project.version}")
+    }
+}
+publishing {
+    repositories {
+        maven {
+            name = "GitHubPackages"
+            url = uri("https://maven.pkg.github.com/artraxon/unexbot")
+            credentials {
+                val GITHUB_USER: String by project
+                val GITHUB_TOKEN: String by project
+
+                username = GITHUB_USER
+                password = GITHUB_TOKEN
+            }
+        }
+    }
+    publications {
+        register<MavenPublication>("gpr") {
+            artifactId = "unexBot"
+            groupId = "de.rtrx.a"
+            from(components["kotlin"])
+        }
     }
 }
