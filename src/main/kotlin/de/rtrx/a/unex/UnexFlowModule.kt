@@ -1,6 +1,5 @@
-package de.rtrx.a.flow
+package de.rtrx.a.unex
 
-import com.google.inject.AbstractModule
 import com.google.inject.Provides
 import com.google.inject.Scopes
 import com.google.inject.TypeLiteral
@@ -8,10 +7,10 @@ import com.google.inject.name.Names
 import com.uchuhimo.konf.Config
 import de.rtrx.a.RedditSpec
 import de.rtrx.a.database.*
+import de.rtrx.a.flow.*
 import de.rtrx.a.flow.events.*
 import de.rtrx.a.initConfig
 import de.rtrx.a.monitor.*
-import de.rtrx.a.unex.*
 import dev.misfitlabs.kotlinguice4.KotlinModule
 import dev.misfitlabs.kotlinguice4.typeLiteral
 import kotlinx.coroutines.CoroutineScope
@@ -22,7 +21,6 @@ import net.dean.jraw.RedditClient
 import net.dean.jraw.http.OkHttpNetworkAdapter
 import net.dean.jraw.http.UserAgent
 import net.dean.jraw.models.Message
-import net.dean.jraw.models.Submission
 import net.dean.jraw.oauth.Credentials
 import net.dean.jraw.oauth.OAuthHelper
 import net.dean.jraw.references.SubmissionReference
@@ -30,7 +28,7 @@ import java.lang.Exception
 import javax.inject.Named
 import javax.inject.Provider
 
-class FlowModule(private val options: Map<String, Any>): KotlinModule() {
+class UnexFlowModule(private val options: Map<String, Any>): KotlinModule() {
     val config: Config
     val redditClient: RedditClient
     val newPostEvent: NewPostReferenceEvent
@@ -82,6 +80,8 @@ class FlowModule(private val options: Map<String, Any>): KotlinModule() {
                 //.annotatedWith(Names.named("sent"))
                 //.to(SimpleMultiplexer.SimpleMultiplexerBuilder::class.java)
 
+
+        bind(Conversation::class.java).toProvider(DefferedConversationProvider::class.java)
 
         //Dispatcher Stub
         bind(MarkAsReadFlow::class.java)

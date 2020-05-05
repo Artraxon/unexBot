@@ -1,10 +1,8 @@
 package de.rtrx.a
 
 import com.google.inject.Guice
-import com.google.inject.internal.cglib.proxy.`$Dispatcher`
 import de.rtrx.a.database.DDL
-import de.rtrx.a.flow.FlowDispatcherInterface
-import de.rtrx.a.flow.FlowModule
+import de.rtrx.a.unex.UnexFlowModule
 import de.rtrx.a.unex.UnexFlowDispatcher
 import kotlinx.coroutines.*
 import mu.KotlinLogging
@@ -14,7 +12,7 @@ private val logger = KotlinLogging.logger {  }
 @ExperimentalCoroutinesApi
 fun main(args: Array<String>) {
     val options = parseOptions(args)
-    val injector = Guice.createInjector(FlowModule(options))
+    val injector = Guice.createInjector(UnexFlowModule(options))
     injector.getInstance(DDL::class.java).init(
             createDDL = (options.get("createDDL") as Boolean?) ?: true,
             createFunctions = (options.get("createDBFunctions") as Boolean?) ?: true
