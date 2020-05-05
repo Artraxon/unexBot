@@ -164,14 +164,3 @@ sealed class FlowResult <T: Flow> (val finishedFlow: T){
 }
 
 
-class Callback<T, R>(private val action: (T) -> R) : (T) -> R{
-    private var wasCalled = false
-    override operator fun invoke(value: T): R {
-        if(wasCalled == true) throw CallbackAlreadyCalledException()
-        else return action(value)
-    }
-
-    class CallbackAlreadyCalledException : Throwable("Callback was already called")
-    class NoCallbackDefinedWarning: Throwable("No Callback function was set")
-}
-

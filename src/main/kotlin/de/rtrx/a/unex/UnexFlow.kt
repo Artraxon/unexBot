@@ -21,6 +21,7 @@ import net.dean.jraw.models.Submission
 import net.dean.jraw.references.CommentReference
 import net.dean.jraw.references.SubmissionReference
 import javax.inject.Inject
+import javax.inject.Provider
 
 private val logger = KotlinLogging.logger { }
 /**
@@ -36,21 +37,17 @@ class UnexFlow(
         private val incomingMessages: IncomingMessagesEvent,
         private val config: Config,
         private val linkage: Linkage,
-        private val monitorBuilder: MonitorBuilder<*>
+        private val monitorBuilder: MonitorBuilder<*>,
+        private val conversation: Conversation
 ) : IFlowStub<SubmissionReference> by flowStub,
         Flow{
-    private val defferedOwnMessage: CompletableDeferred<Message> = CompletableDeferred()
-    val ownMessage get() = defferedOwnMessage.getCompleted()
-
-    private val defferedReply: CompletableDeferred<Message> = CompletableDeferred()
-    val reply get() = defferedReply.getCompleted()
 
     private val defferedComment: CompletableDeferred<Comment> = CompletableDeferred()
     private val defferedCommentRef: CompletableDeferred<CommentReference> = CompletableDeferred()
     val incompletableDefferedComment: Deferred<Comment> get() = defferedComment
     val comment get() = defferedComment.getCompleted()
 
-    val removeSubmission = remove()
+    private val removeSubmission = remove()
 
     lateinit var monitor: Monitor
 
@@ -63,8 +60,11 @@ class UnexFlow(
                     callback(SubmissionAlreadyPresent(this@UnexFlow))
                     return@launch
                 }
-                subscribe(this@UnexFlow::saveOwnMessage, sentMessages)
-                subscribe(this@UnexFlow::saveAnswer, incomingMessages)
+                val awaitedReply = async { conversation.run { waitForCompletion(produceCheckMessage(initValue.id)) } }
+
+                subscribe(conversation::start, sentMessages)
+                subscribe(conversation::reply, incomingMessages)
+
 
                 composingFn(initValue.inspect().author, initValue.inspect().permalink)
 
@@ -78,7 +78,7 @@ class UnexFlow(
                 }
 
                 val answered = select<Boolean> {
-                    defferedReply.onAwait {
+                    awaitedReply.onAwait {
                         logger.trace("Received Reply for ${initValue.fullName}")
                         deletionJob.cancel()
                         if (removeSubmission.isActive || removeSubmission.isCompleted) {
@@ -97,6 +97,7 @@ class UnexFlow(
                 }
 
                 if (!answered) return@launch
+                val reply = awaitedReply.getCompleted()
 
 
                 val (comment, ref) = replyFn(initValue.inspect(), reply.body)
@@ -119,29 +120,6 @@ class UnexFlow(
         }
     }
 
-    suspend fun saveOwnMessage(message: Message){
-        launch {
-            if(checkMessage(message.body)){
-                defferedOwnMessage.complete(message)
-            }
-        }
-    }
-
-    suspend fun saveAnswer(message: Message){
-        launch {
-            val proceed = select<Boolean> {
-                defferedOwnMessage.onAwait { true }
-                defferedReply.onAwait { false }
-                onTimeout(config[RedditSpec.messages.unread.maxTimeDistance]) { false }
-            }
-            if(proceed){
-                if(message.firstMessage == ownMessage.fullName){
-                    defferedReply.complete(message)
-                }
-            }
-        }
-    }
-
     private fun remove(): Job {
         return this.launch(start = CoroutineStart.LAZY) {
             val willRemove = linkage.createCheckSelectValues(
@@ -155,24 +133,6 @@ class UnexFlow(
         }
     }
 
-    fun checkMessage(body: String): Boolean {
-        val startIndex = body.indexOf("(")
-        val endIndex = body.indexOf(")")
-
-        //Check whether the parent message was sent by us and if a link exists.
-        if (startIndex >= 0 && endIndex >= 0) {
-            //Extract the Link from the parent message by cropping around the first parenthesis
-            return try {
-                val id = body
-                        .slice((startIndex + 1) until endIndex)
-                        //Extract the ID of the submission
-                        .split("comments/")[1].split("/")[0]
-                id == this.initValue.id
-            } catch (t: Throwable) { false }
-
-        }
-        return false
-    }
 
     companion object{
         val logger = KotlinLogging.logger {  }
@@ -188,6 +148,7 @@ interface UnexFlowBuilder : FlowBuilder<UnexFlow, SubmissionReference>{
     fun setUnignoreFn(fn: Unignorer): UnexFlowBuilder
     fun setLinkage(linkage: Linkage): UnexFlowBuilder
     fun setMonitor(monitorBuilder: MonitorBuilder<*>): UnexFlowBuilder
+    fun setConversation(conversation: Conversation): UnexFlowBuilder
 }
 abstract class UnexFlowBuilderDSL : UnexFlowBuilder, FlowBuilderDSL<UnexFlow,  SubmissionReference>()
 
@@ -202,7 +163,8 @@ class RedditUnexFlowFactory @Inject constructor(
         private val replyFn: Replyer,
         private val unignoreFn: Unignorer,
         private val monitorFactory: MonitorFactory<*, *>,
-        private val linkage: Linkage
+        private val linkage: Linkage,
+        private val conversationFactory: Provider<Conversation>
 ) : UnexFlowFactory {
     private lateinit var _sentMessages: SentMessageEvent
     private lateinit var _incomingMessages: IncomingMessagesEvent
@@ -217,6 +179,7 @@ class RedditUnexFlowFactory @Inject constructor(
                 .setUnignoreFn(unignoreFn)
                 .setMonitor(monitorFactory.get())
                 .setLinkage(linkage)
+                .setConversation(conversationFactory.get())
                 .setSubscribeAccess { unexFlow: UnexFlow, fn: suspend (Any) -> Unit, type: EventType<Any> ->
                     dispatcher.subscribe(unexFlow, fn, type)
                 }
@@ -239,6 +202,7 @@ class RedditUnexFlowFactory @Inject constructor(
         lateinit var messagesConfig: Config
         lateinit var linkage: Linkage
         lateinit var monitorBuilder: MonitorBuilder<*>
+        lateinit var conversation: Conversation
         override fun setComposingFn(fn: MessageComposer): UnexFlowBuilderDSL {
             this.composingFn = fn
             return this
@@ -279,64 +243,18 @@ class RedditUnexFlowFactory @Inject constructor(
             return this
         }
 
+        override fun setConversation(conversation: Conversation): UnexFlowBuilder {
+            this.conversation = conversation
+            return this
+        }
+
         override fun build(): UnexFlow {
             val stub = FlowStub(_initValue!!, _subscribeAccess, _unsubscribeAccess, CoroutineScope(Dispatchers.Default))
-            val flow = UnexFlow( stub, _callback, composingFn, replyFn, unignoreFn, sentMessages, incomingMessagesEvent, messagesConfig, linkage, monitorBuilder)
+            val flow = UnexFlow( stub, _callback, composingFn, replyFn, unignoreFn, sentMessages, incomingMessagesEvent, messagesConfig, linkage, monitorBuilder, conversation)
             stub.setOuter(flow)
             return flow
         }
     }
 
 }
-
-interface MessageComposer: (String, String) -> Unit
-class RedditMessageComposer @Inject constructor(
-        private val redditClient: RedditClient,
-        private val config: Config
-): MessageComposer {
-    override fun invoke(author: String, postURL: String) {
-        redditClient.me().inbox().compose(
-                dest = author,
-                subject = config[RedditSpec.messages.sent.subject],
-                body = config[RedditSpec.messages.sent.body]
-                        .replace("%{Submission}", postURL)
-                        .replace("%{HoursUntilDrop}", (config[RedditSpec.messages.sent.timeSaved] / (1000 * 60 * 60)).toString())
-                        .replace("%{subreddit}", config[RedditSpec.subreddit])
-                        .replace("%{MinutesUntilRemoval}", (config[RedditSpec.scoring.timeUntilRemoval] / (1000 * 60)).toString())
-        )
-    }
-}
-
-interface Replyer : (Submission, String) -> Pair<Comment, CommentReference>
-class RedditReplyer @Inject constructor(
-        private val redditClient: RedditClient,
-        private val config: Config): Replyer {
-    override fun invoke(submission: Submission, reason: String): Pair<Comment, CommentReference> {
-        val comment = submission.toReference(redditClient)
-                .reply(config[RedditSpec.scoring.commentBody].replace("%{Reason}",
-                        reason.take(config[RedditSpec.messages.unread.answerMaxCharacters])))
-        return comment to comment.toReference(redditClient)
-    }
-}
-
-interface Unignorer : (SubmissionReference) -> Unit
-class RedditUnignorer @Inject constructor(
-        private val redditClient: RedditClient
-) : Unignorer{
-    override fun invoke(submissionReference: SubmissionReference) {
-        val response = redditClient.request {
-            it.url("https://oauth.reddit.com/api/unignore_reports").post(
-                    mapOf( "id" to submissionReference.fullName )
-            )
-        }
-        if(response.successful.not()){
-            logger.warn { "couldn't unignore reports from post ${submissionReference.fullName}" }
-        }
-
-    }
-
-}
-
-class SubmissionAlreadyPresent(finishedFlow: UnexFlow) : FlowResult.NotFailedEnd<UnexFlow>(finishedFlow)
-class NoAnswerReceived(finishedFlow: UnexFlow) : FlowResult.NotFailedEnd<UnexFlow>(finishedFlow)
 

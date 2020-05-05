@@ -2,6 +2,7 @@ package de.rtrx.a.flow
 
 import com.nhaarman.mockitokotlin2.*
 import com.uchuhimo.konf.Config
+import com.uchuhimo.konf.source.DefaultLoaders
 import com.uchuhimo.konf.source.Source
 import de.rtrx.a.RedditSpec
 import de.rtrx.a.database.DummyLinkage
@@ -39,6 +40,7 @@ class UnexFlowTest {
     lateinit var stub: FlowStub<SubmissionReference, UnexFlow>
     lateinit var monitor: Monitor
     lateinit var monitorBuilder: MonitorBuilder<*>
+    lateinit var conversation: DefferedConversation
 
     private val sentMessageEvent = object : SentMessageEvent {}
     private val incomingMessagesEvent = object : IncomingMessagesEvent {}
@@ -46,7 +48,8 @@ class UnexFlowTest {
     val configValues = Source.from.map.flat(mapOf(
             "reddit.messages.sent.timeSaved" to "10000",
             "reddit.messages.unread.maxAge" to "10000",
-            "reddit.scoring.timeUntilRemoval" to "1000"
+            "reddit.scoring.timeUntilRemoval" to "1000",
+            "reddit.messages.unread.maxTimeDistance" to "300000"
     ))
     val messagesConfig = spy(Config { addSpec(RedditSpec) }.withSource(configValues))
     val ownMessageID = "TestMessageID"
@@ -99,6 +102,7 @@ class UnexFlowTest {
             on { body }.doReturn(this@UnexFlowTest.reason)
             on { firstMessage }.doReturn(this@UnexFlowTest.ownMessageID)
         }
+        conversation = spy(DefferedConversation(messagesConfig))
         comment = mock()
         commentReference = mock()
         stub = spy(FlowStub(
@@ -127,7 +131,8 @@ class UnexFlowTest {
                 incomingMessagesEvent,
                 messagesConfig,
                 linkage,
-                monitorBuilder)
+                monitorBuilder,
+                conversation)
 
         stub.setOuter(flow)
     }
@@ -135,8 +140,8 @@ class UnexFlowTest {
     private fun testFlowOutput() = assertAll(
             { assert(this.author == foundAuthor) { "Recipient $foundAuthor does not match author $author" } },
             { assert(this.submissionURL == foundSubmissionURL) { "SubmissionURL $foundSubmissionURL does not match ${this.submissionURL}" } },
-            { assert(this.ownMessage == flow.ownMessage) },
-            { assert(this.reply == flow.reply) },
+            { assert(this.ownMessage == conversation.ownMessage) },
+            { assert(this.reply == conversation.reply) },
             { assert(this.comment == flow.comment) },
             { assert(this.commentText == reply.body)},
             { assert(this.submission.isRemoved.not())},
@@ -151,8 +156,8 @@ class UnexFlowTest {
     fun `flow gets messages in correct order`(){
         runBlocking {
             flow.start()
-            flow.saveOwnMessage(ownMessage)
-            flow.saveAnswer(reply)
+            conversation.start(ownMessage)
+            conversation.reply(reply)
             assert(select<Boolean> {
                 flow.incompletableDefferedComment.onAwait { true }
                 onTimeout(timeout) {false}
@@ -167,8 +172,8 @@ class UnexFlowTest {
     fun `flow gets Messages in wrong order`(){
         runBlocking {
             flow.start()
-            flow.saveAnswer(reply)
-            flow.saveOwnMessage(ownMessage)
+            conversation.reply(reply)
+            conversation.start(ownMessage)
             assert(select<Boolean> {
                 flow.incompletableDefferedComment.onAwait { true }
                 onTimeout(timeout) {false}
@@ -189,7 +194,7 @@ class UnexFlowTest {
         
         runBlocking {
             flow.start()
-            flow.saveOwnMessage(ownMessage)
+            conversation.start(ownMessage)
             expectResult(defferedResult)
         }
         assert(result is NoAnswerReceived)
@@ -205,9 +210,9 @@ class UnexFlowTest {
 
         runBlocking {
             flow.start()
-            flow.saveOwnMessage(ownMessage)
+            conversation.start(ownMessage)
             delay(50L)
-            flow.saveAnswer(reply)
+            conversation.reply(reply)
             expectResult(defferedResult)
         }
 
@@ -219,12 +224,9 @@ class UnexFlowTest {
 
     @Test
     fun `link Check`(){
-        runBlocking {
-            flow.start()
-        }
-        assert(flow.checkMessage(botMessage))
-        assert(!flow.checkMessage(botMessage.replace("t", "s")))
-        assert(!flow.checkMessage(botMessage.replace("x", "m")))
+        assert(produceCheckString(submissionID)(botMessage))
+        assert(!produceCheckString(submissionID)(botMessage.replace("t", "s")))
+        assert(!produceCheckString(submissionID)(botMessage.replace("x", "m")))
     }
 
     @Test
@@ -249,7 +251,7 @@ class UnexFlowTest {
 
         val result = runBlocking {
             runForResult {
-                flow.saveOwnMessage(ownMessage)
+                conversation.start(ownMessage)
             }
         }
 
