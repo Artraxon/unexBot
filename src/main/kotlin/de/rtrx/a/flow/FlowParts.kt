@@ -3,6 +3,7 @@ package de.rtrx.a.flow
 import com.google.inject.Inject
 import com.google.inject.Provider
 import com.google.inject.assistedinject.Assisted
+import com.google.inject.assistedinject.AssistedInject
 import com.uchuhimo.konf.Config
 import de.rtrx.a.RedditSpec
 import de.rtrx.a.database.Linkage
@@ -19,6 +20,7 @@ import net.dean.jraw.references.PublicContributionReference
 import javax.inject.Named
 
 typealias MessageCheck = (Message) -> Boolean
+typealias DeletePrevention = suspend (PublicContributionReference) -> Boolean
 
 class Callback<T, R>(private val action: (T) -> R) : (T) -> R{
     private var wasCalled = false
@@ -173,36 +175,33 @@ interface DelayedDelete {
      * Starts The Implementation Specific counter for deleting the Post
      */
     fun start()
+
     suspend fun safeSelectTo(clause1: SelectClause1<Any?>): Boolean
-}
 
-class RedditDelayedDeleteFactory @Inject constructor(
-        private val config: Config,
-        private val linkage: Linkage,
-        private val unignorer: Unignorer
-): DelayedDeleteFactory{
-    override fun create(publicContribution: PublicContributionReference, scope: CoroutineScope): RedditDelayedDelete {
-        return RedditDelayedDelete(
-                config[RedditSpec.scoring.timeUntilRemoval],
-                config[RedditSpec.messages.sent.timeSaved] - config[RedditSpec.scoring.timeUntilRemoval],
-                linkage,
-                unignorer,
-                publicContribution,
-                scope
-        )
+    companion object {
+        val approvedCheck: (Linkage) -> DeletePrevention = { linkage ->
+            { publicContribution: PublicContributionReference ->
+                linkage.createCheckSelectValues(
+                        publicContribution.fullName,
+                        null,
+                        null,
+                        emptyArray(),
+                        { if (it.has("approved")) it["approved"].asBoolean.not() else true }
+                )
+            }
+        }
     }
-
 }
 
-//TODO get Assisted Inject working
-class RedditDelayedDelete @Inject constructor(
-        @param:Assisted private val delayToDeleteMillis: Long,
-        @param:Assisted private val delayToFinishMillis: Long,
-        @param:Assisted private val linkage: Linkage,
-        @param:Assisted private val unignorer: Unignorer,
-        private val publicContribution: PublicContributionReference,
-        private val scope: CoroutineScope
-        ): DelayedDelete {
+class RedditDelayedDelete @AssistedInject constructor(
+        @param:Named("delayToDeleteMillis") private val delayToDeleteMillis: Long,
+        @param:Named("delayToFinishMillis") private val delayToFinishMillis: Long,
+        private val linkage: Linkage,
+        private val unignorer: Unignorer,
+        private val preventsDeletion: DeletePrevention,
+        @param:Assisted private val publicContribution: PublicContributionReference,
+        @param:Assisted private val scope: CoroutineScope
+): DelayedDelete {
     val removeSubmission = remove()
     lateinit var deletionJob: Job
 
@@ -238,13 +237,7 @@ class RedditDelayedDelete @Inject constructor(
 
     private fun remove(): Job {
         return scope.launch(start = CoroutineStart.LAZY) {
-            val willRemove = linkage.createCheckSelectValues(
-                    publicContribution.fullName,
-                    null,
-                    null,
-                    emptyArray(),
-                    { if(it.has("approved")) it["approved"].asBoolean.not() else true }
-            )
+            val willRemove = preventsDeletion(publicContribution )
             if(willRemove) publicContribution.remove()
         }
     }
@@ -252,7 +245,6 @@ class RedditDelayedDelete @Inject constructor(
         private val logger = KotlinLogging.logger {  }
     }
 }
-
 
 class SubmissionAlreadyPresent<T: Flow>(finishedFlow: T) : FlowResult.NotFailedEnd<T>(finishedFlow)
 class NoAnswerReceived<T: Flow>(finishedFlow: T) : FlowResult.NotFailedEnd<T>(finishedFlow)

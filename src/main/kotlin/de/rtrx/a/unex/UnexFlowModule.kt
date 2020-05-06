@@ -24,6 +24,7 @@ import net.dean.jraw.http.UserAgent
 import net.dean.jraw.models.Message
 import net.dean.jraw.oauth.Credentials
 import net.dean.jraw.oauth.OAuthHelper
+import net.dean.jraw.references.PublicContributionReference
 import net.dean.jraw.references.SubmissionReference
 import java.lang.Exception
 import javax.inject.Named
@@ -56,6 +57,10 @@ class UnexFlowModule(private val options: Map<String, Any>): KotlinModule() {
             flowFactory: UnexFlowFactory,
             @Named("launcherScope") launcherScope: CoroutineScope
     ) : IFlowDispatcherStub<UnexFlow, UnexFlowFactory> = FlowDispatcherStub(newPosts, flowFactory, launcherScope)
+
+    @Provides
+    fun provideApprovedCheck(linkage: Linkage) = DelayedDelete.approvedCheck(linkage)
+
 
     override fun configure() {
         if((options.get("useDB") as Boolean?) ?: true){
@@ -91,7 +96,14 @@ class UnexFlowModule(private val options: Map<String, Any>): KotlinModule() {
                 .toInstance(newPostsOutput)
         bind(object : TypeLiteral<MonitorFactory<*, *>>() {}).to(DBCheckFactory::class.java)
 
-        bind(DelayedDeleteFactory::class.java).to(RedditDelayedDeleteFactory::class.java)
+        bind(Long::class.java).annotatedWith(Names.named("delayToDeleteMillis")).toInstance(config[RedditSpec.scoring.timeUntilRemoval])
+        bind(Long::class.java).annotatedWith(Names.named("delayToFinishMillis")).toInstance(config[RedditSpec.messages.sent.timeSaved])
+
+        install(FactoryModuleBuilder()
+                .implement(DelayedDelete::class.java, RedditDelayedDelete::class.java)
+                .build(DelayedDeleteFactory::class.java))
+
+        //bind(DelayedDeleteFactory::class.java).to(RedditDelayedDeleteFactory::class.java)
         bind(UnexFlowFactory::class.java).to(RedditUnexFlowFactory::class.java)
         bind(CoroutineScope::class.java).annotatedWith(Names.named("launcherScope"))
                 .toInstance(CoroutineScope(Dispatchers.Default))
@@ -102,7 +114,6 @@ class UnexFlowModule(private val options: Map<String, Any>): KotlinModule() {
         bind(MonitorBuilder::class.java).to(DBCheckBuilder::class.java)
         bind(UnexFlowDispatcher::class.java)
     }
-
 
 
     fun initReddit(config: Config): RedditClient {
