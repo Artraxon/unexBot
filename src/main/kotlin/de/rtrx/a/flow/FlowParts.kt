@@ -6,6 +6,7 @@ import com.google.inject.assistedinject.Assisted
 import com.google.inject.assistedinject.AssistedInject
 import com.uchuhimo.konf.Config
 import de.rtrx.a.RedditSpec
+import de.rtrx.a.database.Booleable
 import de.rtrx.a.database.Linkage
 import kotlinx.coroutines.*
 import kotlinx.coroutines.selects.SelectClause1
@@ -20,7 +21,7 @@ import net.dean.jraw.references.PublicContributionReference
 import javax.inject.Named
 
 typealias MessageCheck = (Message) -> Boolean
-typealias DeletePrevention = suspend (PublicContributionReference) -> Boolean
+typealias DeletePrevention = suspend (PublicContributionReference) -> DelayedDelete.DeleteResult
 
 class Callback<T, R>(private val action: (T) -> R) : (T) -> R{
     private var wasCalled = false
@@ -176,7 +177,7 @@ interface DelayedDelete {
      */
     fun start()
 
-    suspend fun safeSelectTo(clause1: SelectClause1<Any?>): Boolean
+    suspend fun safeSelectTo(clause1: SelectClause1<Any?>): DeleteResult
 
     companion object {
         val approvedCheck: (Linkage) -> DeletePrevention = { linkage ->
@@ -186,9 +187,17 @@ interface DelayedDelete {
                         null,
                         null,
                         emptyArray(),
-                        { if (it.has("approved")) it["approved"].asBoolean.not() else true }
-                )
+                        { if (it.get("approved")?.asBoolean ?: false) NotDeletedApproved() else DeleteResult.WasDeleted() }
+                ).checkResult as DeleteResult
             }
+        }
+        class NotDeletedApproved:DeleteResult.NotDeleted()
+    }
+    sealed class DeleteResult(bool: Boolean): Booleable{
+        override val bool: Boolean = bool
+        open class WasDeleted: DeleteResult(false)
+        open class NotDeleted: DeleteResult(true){
+            class NotDeletedReapproved: NotDeleted()
         }
     }
 }
@@ -215,30 +224,36 @@ class RedditDelayedDelete @AssistedInject constructor(
         }
     }
 
-    override suspend fun safeSelectTo(clause1: SelectClause1<Any?>): Boolean {
+    override suspend fun safeSelectTo(clause1: SelectClause1<Any?>): DelayedDelete.DeleteResult {
         return select {
             clause1 {
                 logger.trace("Received Reply for ${publicContribution.fullName}")
                 deletionJob.cancel()
+                val removalCheck: DelayedDelete.DeleteResult
                 if (removeSubmission.isActive || removeSubmission.isCompleted) {
-                    removeSubmission.join()
+                    removalCheck = removeSubmission
+                            .await()
+                            .takeUnless { it is DelayedDelete.DeleteResult.WasDeleted }
+                            ?: DelayedDelete.DeleteResult.NotDeleted.NotDeletedReapproved()
+
                     publicContribution.approve()
                     unignorer(publicContribution)
                     logger.trace("Reapproved ${publicContribution.fullName}")
-                }
-                true
+                } else { removalCheck = DelayedDelete.DeleteResult.NotDeleted() }
+                removalCheck
             }
             deletionJob.onJoin {
                 logger.trace("Didn't receive an answer for ${publicContribution.fullName}")
-                false
+                DelayedDelete.DeleteResult.WasDeleted()
             }
         }
     }
 
-    private fun remove(): Job {
-        return scope.launch(start = CoroutineStart.LAZY) {
-            val willRemove = preventsDeletion(publicContribution )
-            if(willRemove) publicContribution.remove()
+    private fun remove(): Deferred<DelayedDelete.DeleteResult> {
+        return scope.async (start = CoroutineStart.LAZY) {
+            val willRemove = preventsDeletion(publicContribution)
+            if(!willRemove.bool) publicContribution.remove()
+            willRemove
         }
     }
     companion object {

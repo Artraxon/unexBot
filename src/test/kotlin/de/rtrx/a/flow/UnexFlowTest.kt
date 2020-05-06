@@ -1,11 +1,11 @@
 package de.rtrx.a.flow
 
+import com.google.gson.JsonObject
 import com.nhaarman.mockitokotlin2.*
 import com.uchuhimo.konf.Config
 import com.uchuhimo.konf.source.Source
 import de.rtrx.a.RedditSpec
-import de.rtrx.a.database.DummyLinkage
-import de.rtrx.a.database.Linkage
+import de.rtrx.a.database.*
 import de.rtrx.a.flow.events.EventType
 import de.rtrx.a.flow.events.IncomingMessagesEvent
 import de.rtrx.a.flow.events.MessageEvent
@@ -25,6 +25,7 @@ import net.dean.jraw.references.SubmissionReference
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertAll
+import kotlin.reflect.jvm.internal.impl.util.CheckResult
 
 val timeout = 3 * 1000L
 class UnexFlowTest {
@@ -41,9 +42,12 @@ class UnexFlowTest {
     lateinit var monitor: Monitor
     lateinit var monitorBuilder: MonitorBuilder<*>
     lateinit var conversation: DefferedConversation
+    lateinit var delayedDeleteFactory: DelayedDeleteFactory
 
     private val sentMessageEvent = object : SentMessageEvent {}
     private val incomingMessagesEvent = object : IncomingMessagesEvent {}
+
+
 
     val configValues = Source.from.map.flat(mapOf(
             "reddit.messages.sent.timeSaved" to "10000",
@@ -105,6 +109,12 @@ class UnexFlowTest {
         conversation = spy(DefferedConversation(config))
         comment = mock()
         commentReference = mock()
+        delayedDeleteFactory = spy(object: DelayedDeleteFactory {
+                    override fun create(
+                            publicContribution: PublicContributionReference,
+                            scope: CoroutineScope
+                    ) = createDeletion(config[RedditSpec.scoring.timeUntilRemoval], config[RedditSpec.messages.sent.timeSaved])
+                })
         stub = spy(FlowStub(
                 submissionRef,
                 {flow: UnexFlow, fn, type -> subscribeCalls.add(Triple(flow, fn, type))},
@@ -126,24 +136,12 @@ class UnexFlowTest {
                         return comment to commentReference
                     }
                 },
-                object : Unignorer { override fun invoke(p1: PublicContributionReference) { } },
                 sentMessageEvent,
                 incomingMessagesEvent,
-                config,
                 linkage,
                 monitorBuilder,
                 conversation,
-                object: DelayedDeleteFactory {
-                    override fun create(publicContribution: PublicContributionReference, scope: CoroutineScope): DelayedDelete {
-                        return RedditDelayedDelete(
-                                config[RedditSpec.scoring.timeUntilRemoval],
-                                config[RedditSpec.messages.sent.timeSaved],
-                                linkage,
-                                object : Unignorer { override fun invoke(p1: PublicContributionReference) { } },
-                                submissionRef,
-                                CoroutineScope(Dispatchers.Default)
-                        ) }
-                })
+                delayedDeleteFactory)
 
         stub.setOuter(flow)
     }
@@ -197,10 +195,15 @@ class UnexFlowTest {
 
     @Test
     fun `no Answer`() {
-        doReturn(1L).whenever(config)[RedditSpec.scoring.timeUntilRemoval]
-        doReturn(10L).whenever(config)[RedditSpec.messages.sent.timeSaved]
-        doReturn(true)
-                .whenever(linkage).createCheckSelectValues( any(), anyOrNull(), anyOrNull(), any(), any() )
+        doReturn(createDeletion(1, 10)).whenever(delayedDeleteFactory).create(any(), any())
+        doReturn(CheckSelectResult(DelayedDelete.DeleteResult.WasDeleted(), true.toBooleable(), null))
+                .whenever(linkage).createCheckSelectValues(
+                        any(),
+                        anyOrNull(),
+                        anyOrNull(),
+                        any(),
+                        any<(JsonObject) -> Booleable>()
+                )
 
         
         runBlocking {
@@ -214,10 +217,15 @@ class UnexFlowTest {
 
     @Test
     fun `late Answer`() {
-        doReturn(1L).whenever(config)[RedditSpec.scoring.timeUntilRemoval]
-        doReturn(1000L).whenever(config)[RedditSpec.messages.sent.timeSaved]
-        doReturn(true)
-                .whenever(linkage).createCheckSelectValues( any(), anyOrNull(), anyOrNull(), any(), any() )
+        doReturn(createDeletion(1, 10000)).whenever(delayedDeleteFactory).create(any(), any())
+        doReturn(CheckSelectResult(DelayedDelete.DeleteResult.WasDeleted(), true.toBooleable(), null))
+                .whenever(linkage).createCheckSelectValues(
+                        any(),
+                        anyOrNull(),
+                        anyOrNull(),
+                        any(),
+                        any<(JsonObject) -> Booleable>()
+                )
 
         runBlocking {
             flow.start()
@@ -254,11 +262,15 @@ class UnexFlowTest {
 
     @Test
     fun `No Removal upon approval`(){
-        doReturn(false)
-                .whenever(linkage).createCheckSelectValues( any(), anyOrNull(), anyOrNull(), any(), any() )
-        doReturn(1L).whenever(config)[RedditSpec.scoring.timeUntilRemoval]
-        doReturn(10L).whenever(config)[RedditSpec.messages.sent.timeSaved]
-
+        doReturn(createDeletion(1, 10)).whenever(delayedDeleteFactory).create(any(), any())
+        doReturn(CheckSelectResult(DelayedDelete.DeleteResult.NotDeleted(), true.toBooleable(), null))
+                .whenever(linkage).createCheckSelectValues(
+                        any(),
+                        anyOrNull(),
+                        anyOrNull(),
+                        any(),
+                        any<(JsonObject) -> Booleable>()
+                )
 
         val result = runBlocking {
             runForResult {
@@ -279,7 +291,19 @@ class UnexFlowTest {
         expectResult(defferedResult)
         return result!!
     }
+
+    fun createDeletion(toDeletion: Long, saved: Long): RedditDelayedDelete{
+        return spy(RedditDelayedDelete(
+                toDeletion,
+                saved - toDeletion,
+                linkage,
+                object : Unignorer { override fun invoke(p1: PublicContributionReference) { } },
+                DelayedDelete.approvedCheck(linkage),
+                submissionRef,
+                CoroutineScope(Dispatchers.Default)))
+    }
 }
+
 
 suspend fun expectResult(def: Deferred<*>) = assert(select {
     def.onAwait { true }

@@ -22,6 +22,14 @@ import java.util.*
 import kotlin.system.exitProcess
 
 
+interface Booleable{
+    val bool: Boolean
+}
+fun Boolean.toBooleable() = object : Booleable {
+    override val bool: Boolean
+        get() = this@toBooleable
+}
+data class CheckSelectResult(public val checkResult: Booleable, public val dbResult: Booleable, public val exception: Throwable?)
 interface Linkage {
     val connection: Connection
 
@@ -32,28 +40,30 @@ interface Linkage {
 
     /**
      * @return whether the check was inserted successfully into the DB or not
-     */
-    fun createCheck(submission_fullname: String, botComment: Comment?, stickied_comment: Comment?, top_comments: Array<Comment>): Pair<Boolean, List<Comment>> {
+     */ fun createCheck(submission_fullname: String, botComment: Comment?, stickied_comment: Comment?, top_comments: Array<Comment>): Pair<Boolean, List<Comment>> {
         return createCheck(getSubmissionJson(submission_fullname), botComment, stickied_comment, top_comments)
     }
 
     fun getSubmissionJson(submissionFullname: String): JsonObject
 
 
-    fun createCheckSelectValues(
+    fun <T: Booleable> createCheckSelectValues(
             submission_fullname: String,
             botComment: Comment?,
             stickied_comment: Comment?,
             top_comments: Array<Comment>,
-            predicate: (JsonObject) -> Boolean
-    ): Boolean {
+            predicate: (JsonObject) -> T
+    ): CheckSelectResult {
         return try {
             val json = getSubmissionJson(submission_fullname)
-            if(predicate(json)) this.createCheck(json, botComment, stickied_comment, top_comments).first
-            else false
+            val predicateResult = predicate(json)
+            CheckSelectResult(predicateResult,
+                    if(predicateResult.bool) this.createCheck(json, botComment, stickied_comment, top_comments).first.toBooleable()
+                    else false.toBooleable(),
+                    null)
         } catch (e: Throwable) {
             KotlinLogging.logger {  }.error { e.message }
-            false
+            CheckSelectResult(false.toBooleable(), false.toBooleable(), e)
         }
     }
 
@@ -66,6 +76,7 @@ interface Linkage {
     fun createCheck(jsonData: JsonObject, botComment: Comment?, stickied_comment: Comment?, top_comments: Array<Comment>): Pair<Boolean, List<Comment>>
 
     fun add_parent(child: Comment, parent: Comment): Boolean
+
 }
 
 class DummyLinkage:Linkage {

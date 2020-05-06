@@ -46,8 +46,6 @@ class UnexFlow(
     val incompletableDefferedComment: Deferred<Comment> get() = defferedComment
     val comment get() = defferedComment.getCompleted()
 
-    private val removeSubmission = remove()
-
     lateinit var monitor: Monitor
 
     override suspend fun start() {
@@ -71,7 +69,7 @@ class UnexFlow(
                 deletion.start()
                 val answered = deletion.safeSelectTo(awaitedReply.onAwait)
 
-                if (!answered) {
+                if (!answered.bool) {
                     callback(NoAnswerReceived(this@UnexFlow))
                     return@launch
                 }
@@ -97,20 +95,6 @@ class UnexFlow(
             }
         }
     }
-
-    private fun remove(): Job {
-        return this.launch(start = CoroutineStart.LAZY) {
-            val willRemove = linkage.createCheckSelectValues(
-                    initValue.fullName,
-                    null,
-                    null,
-                    emptyArray(),
-                    { if(it.has("approved")) it["approved"].asBoolean.not() else true }
-            )
-            if(willRemove) initValue.remove()
-        }
-    }
-
 
     companion object{
         val logger = KotlinLogging.logger {  }
