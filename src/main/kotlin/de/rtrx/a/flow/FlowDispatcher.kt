@@ -50,10 +50,11 @@ class FlowDispatcherStub<T: Flow, M: Any, F: FlowFactory<T, M>> @Inject construc
         job = flowLauncherScope.launch(start = CoroutineStart.LAZY) {
             try {
                 for (event in starterEventChannel) {
-                    flows.send(flowFactory.createBuilder(this@FlowDispatcherStub)
-                            .setInitValue(event)
-                            .setFinishCallback(Callback {flowResult -> flowLauncherScope.launch { finishedFlows.send(flowResult) }})
-                            .build().apply { start() })
+                    flows.send(flowFactory.create(
+                            this@FlowDispatcherStub,
+                            event,
+                            Callback {flowResult -> flowLauncherScope.launch { finishedFlows.send(flowResult) }} )
+                            .apply { start() })
                 }
             } catch (e: Throwable){
                 logger.warn { e.message }

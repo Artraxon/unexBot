@@ -139,18 +139,6 @@ class UnexFlow(
     }
 }
 
-interface UnexFlowBuilder : FlowBuilder<UnexFlow, SubmissionReference>{
-    fun setSavedMessages(event: SentMessageEvent): UnexFlowBuilder
-    fun setIncomingMessages(event: IncomingMessagesEvent): UnexFlowBuilder
-    fun setMessagesConfig(messagesConfig: Config): UnexFlowBuilder
-    fun setComposingFn(fn: MessageComposer): UnexFlowBuilder
-    fun setReplyFn(fn: Replyer): UnexFlowBuilder
-    fun setUnignoreFn(fn: Unignorer): UnexFlowBuilder
-    fun setLinkage(linkage: Linkage): UnexFlowBuilder
-    fun setMonitor(monitorBuilder: MonitorBuilder<*>): UnexFlowBuilder
-    fun setConversation(conversation: Conversation): UnexFlowBuilder
-}
-abstract class UnexFlowBuilderDSL : UnexFlowBuilder, FlowBuilderDSL<UnexFlow,  SubmissionReference>()
 
 interface UnexFlowFactory : FlowFactory<UnexFlow, SubmissionReference>{
     fun setSentMessages(sentMessages: SentMessageEvent)
@@ -164,97 +152,42 @@ class RedditUnexFlowFactory @Inject constructor(
         private val unignoreFn: Unignorer,
         private val monitorFactory: MonitorFactory<*, *>,
         private val linkage: Linkage,
-        private val conversationFactory: Provider<Conversation>
+        private val conversationFactory: Provider<Conversation>,
+        private val delayedDeleteFactory: DelayedDeleteFactory
 ) : UnexFlowFactory {
     private lateinit var _sentMessages: SentMessageEvent
     private lateinit var _incomingMessages: IncomingMessagesEvent
 
-    override fun createBuilder(dispatcher: FlowDispatcherInterface<UnexFlow>): UnexFlowBuilderDSL {
-        return UnexFlowBuilderImpl()
-                .setSavedMessages(_sentMessages)
-                .setIncomingMessages(_incomingMessages)
-                .setMessagesConfig(config)
-                .setComposingFn(composingFn)
-                .setReplyFn(replyFn)
-                .setUnignoreFn(unignoreFn)
-                .setMonitor(monitorFactory.get())
-                .setLinkage(linkage)
-                .setConversation(conversationFactory.get())
-                .setSubscribeAccess { unexFlow: UnexFlow, fn: suspend (Any) -> Unit, type: EventType<Any> ->
+    override fun create(dispatcher: FlowDispatcherInterface<UnexFlow>, initValue: SubmissionReference, callback: Callback<FlowResult<UnexFlow>, Unit>): UnexFlow {
+        val stub = FlowStub(
+                initValue,
+                { unexFlow: UnexFlow, fn: suspend (Any) -> Unit, type: EventType<Any> ->
                     dispatcher.subscribe(unexFlow, fn, type)
-                }
-                .setUnsubscribeAccess(dispatcher::unsubscribe) as UnexFlowBuilderDSL
+                },
+                dispatcher::unsubscribe,
+                CoroutineScope(Dispatchers.Default)
+        )
+        val flow = UnexFlow(
+                stub,
+                callback,
+                composingFn,
+                replyFn,
+                _sentMessages,
+                _incomingMessages,
+                linkage,
+                monitorFactory.get(),
+                conversationFactory.get(),
+                delayedDeleteFactory
+        )
+        stub.setOuter(flow)
+        return flow
     }
 
     override fun setSentMessages(sentMessages: SentMessageEvent) {
-        if(!this::_sentMessages.isInitialized)this._sentMessages = sentMessages
+        if (!this::_sentMessages.isInitialized) this._sentMessages = sentMessages
     }
 
     override fun setIncomingMessages(incomingMessages: IncomingMessagesEvent) {
-        if(!this::_incomingMessages.isInitialized)this._incomingMessages = incomingMessages
+        if (!this::_incomingMessages.isInitialized) this._incomingMessages = incomingMessages
     }
-    private class UnexFlowBuilderImpl() : UnexFlowBuilderDSL(){
-        lateinit var composingFn: MessageComposer
-        lateinit var replyFn: Replyer
-        lateinit var unignoreFn: Unignorer
-        lateinit var sentMessages: SentMessageEvent
-        lateinit var incomingMessagesEvent: IncomingMessagesEvent
-        lateinit var messagesConfig: Config
-        lateinit var linkage: Linkage
-        lateinit var monitorBuilder: MonitorBuilder<*>
-        lateinit var conversation: Conversation
-        override fun setComposingFn(fn: MessageComposer): UnexFlowBuilderDSL {
-            this.composingFn = fn
-            return this
-        }
-
-        override fun setReplyFn(fn: Replyer): UnexFlowBuilderDSL {
-            this.replyFn = fn
-            return this
-        }
-
-        override fun setUnignoreFn(fn: Unignorer): UnexFlowBuilderDSL {
-            this.unignoreFn = fn
-            return this
-        }
-
-        override fun setLinkage(linkage: Linkage): UnexFlowBuilderDSL {
-            this.linkage = linkage
-            return this
-        }
-
-        override fun setSavedMessages(event: SentMessageEvent): UnexFlowBuilderDSL {
-            this.sentMessages = event
-            return this
-        }
-
-        override fun setIncomingMessages(event: IncomingMessagesEvent): UnexFlowBuilderDSL {
-            this.incomingMessagesEvent = event
-            return this
-        }
-
-        override fun setMessagesConfig(messagesConfig: Config): UnexFlowBuilderDSL {
-            this.messagesConfig = messagesConfig
-            return this
-        }
-
-        override fun setMonitor(monitor: MonitorBuilder<*>): UnexFlowBuilderDSL {
-            this.monitorBuilder = monitor
-            return this
-        }
-
-        override fun setConversation(conversation: Conversation): UnexFlowBuilder {
-            this.conversation = conversation
-            return this
-        }
-
-        override fun build(): UnexFlow {
-            val stub = FlowStub(_initValue!!, _subscribeAccess, _unsubscribeAccess, CoroutineScope(Dispatchers.Default))
-            val flow = UnexFlow( stub, _callback, composingFn, replyFn, unignoreFn, sentMessages, incomingMessagesEvent, messagesConfig, linkage, monitorBuilder, conversation)
-            stub.setOuter(flow)
-            return flow
-        }
-    }
-
 }
-

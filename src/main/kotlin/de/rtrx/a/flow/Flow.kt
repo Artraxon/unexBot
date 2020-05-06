@@ -91,9 +91,7 @@ abstract class FlowBuilderDSL <T, M: Any > : FlowBuilder<T, M>
 }
 
 interface FlowFactory<T: Flow, M: Any>{
-    fun createBuilder(dispatcher: FlowDispatcherInterface<T>): FlowBuilder<T, M>
-    fun create(dispatcher: FlowDispatcherInterface<T>, builder: FlowBuilder<T, M>.() -> Unit): T
-            = createBuilder(dispatcher).apply(builder).build()
+    fun create(dispatcher: FlowDispatcherInterface<T>, initValue: M, callback: Callback<FlowResult<T>, Unit>): T
 }
 
 
