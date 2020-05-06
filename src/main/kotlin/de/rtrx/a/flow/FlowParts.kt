@@ -2,11 +2,12 @@ package de.rtrx.a.flow
 
 import com.google.inject.Inject
 import com.google.inject.Provider
+import com.google.inject.assistedinject.Assisted
 import com.uchuhimo.konf.Config
 import de.rtrx.a.RedditSpec
-import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.launch
+import de.rtrx.a.database.Linkage
+import kotlinx.coroutines.*
+import kotlinx.coroutines.selects.SelectClause1
 import kotlinx.coroutines.selects.select
 import mu.KotlinLogging
 import net.dean.jraw.RedditClient
@@ -14,7 +15,8 @@ import net.dean.jraw.models.Comment
 import net.dean.jraw.models.Message
 import net.dean.jraw.models.Submission
 import net.dean.jraw.references.CommentReference
-import net.dean.jraw.references.SubmissionReference
+import net.dean.jraw.references.PublicContributionReference
+import javax.inject.Named
 
 typealias MessageCheck = (Message) -> Boolean
 
@@ -139,24 +141,118 @@ class RedditReplyer @Inject constructor(
     }
 }
 
-interface Unignorer : (SubmissionReference) -> Unit
+interface Unignorer : (PublicContributionReference) -> Unit
 
 class RedditUnignorer @Inject constructor(
         private val redditClient: RedditClient
 ) : Unignorer{
-    override fun invoke(submissionReference: SubmissionReference) {
+    override fun invoke(publicContribution: PublicContributionReference) {
         val response = redditClient.request {
             it.url("https://oauth.reddit.com/api/unignore_reports").post(
-                    mapOf( "id" to submissionReference.fullName )
+                    mapOf( "id" to publicContribution.fullName )
             )
         }
         if(response.successful.not()){
-            KotlinLogging.logger {  }.warn { "couldn't unignore reports from post ${submissionReference.fullName}" }
+            KotlinLogging.logger {  }.warn { "couldn't unignore reports from post ${publicContribution.fullName}" }
         }
 
     }
 
 }
+
+interface DelayedDeleteFactory{
+    fun create(publicContribution: PublicContributionReference, scope: CoroutineScope): DelayedDelete
+}
+
+/**
+ * Represents a safe Way for deleting (and reapproving) a [PublicContributionReference] depending on the outcome of a selectClause
+ * (For Example The Finishing of a job or an deferred Value becoming available)
+ */
+interface DelayedDelete {
+    /**
+     * Starts The Implementation Specific counter for deleting the Post
+     */
+    fun start()
+    suspend fun safeSelectTo(clause1: SelectClause1<Any?>): Boolean
+}
+
+class RedditDelayedDeleteFactory @Inject constructor(
+        private val config: Config,
+        private val linkage: Linkage,
+        private val unignorer: Unignorer
+): DelayedDeleteFactory{
+    override fun create(publicContribution: PublicContributionReference, scope: CoroutineScope): RedditDelayedDelete {
+        return RedditDelayedDelete(
+                config[RedditSpec.scoring.timeUntilRemoval],
+                config[RedditSpec.messages.sent.timeSaved] - config[RedditSpec.scoring.timeUntilRemoval],
+                linkage,
+                unignorer,
+                publicContribution,
+                scope
+        )
+    }
+
+}
+
+//TODO get Assisted Inject working
+class RedditDelayedDelete @Inject constructor(
+        @param:Assisted private val delayToDeleteMillis: Long,
+        @param:Assisted private val delayToFinishMillis: Long,
+        @param:Assisted private val linkage: Linkage,
+        @param:Assisted private val unignorer: Unignorer,
+        private val publicContribution: PublicContributionReference,
+        private val scope: CoroutineScope
+        ): DelayedDelete {
+    val removeSubmission = remove()
+    lateinit var deletionJob: Job
+
+    override fun start() {
+        deletionJob = scope.launch {
+            try {
+                delay(delayToDeleteMillis)
+                removeSubmission.start()
+                delay(delayToFinishMillis)
+            } catch (e: CancellationException) { }
+        }
+    }
+
+    override suspend fun safeSelectTo(clause1: SelectClause1<Any?>): Boolean {
+        return select {
+            clause1 {
+                logger.trace("Received Reply for ${publicContribution.fullName}")
+                deletionJob.cancel()
+                if (removeSubmission.isActive || removeSubmission.isCompleted) {
+                    removeSubmission.join()
+                    publicContribution.approve()
+                    unignorer(publicContribution)
+                    logger.trace("Reapproved ${publicContribution.fullName}")
+                }
+                true
+            }
+            deletionJob.onJoin {
+                logger.trace("Didn't receive an answer for ${publicContribution.fullName}")
+                false
+            }
+        }
+    }
+
+    private fun remove(): Job {
+        return scope.launch(start = CoroutineStart.LAZY) {
+            val willRemove = linkage.createCheckSelectValues(
+                    publicContribution.fullName,
+                    null,
+                    null,
+                    emptyArray(),
+                    { if(it.has("approved")) it["approved"].asBoolean.not() else true }
+            )
+            if(willRemove) publicContribution.remove()
+        }
+    }
+    companion object {
+        private val logger = KotlinLogging.logger {  }
+    }
+}
+
 
 class SubmissionAlreadyPresent<T: Flow>(finishedFlow: T) : FlowResult.NotFailedEnd<T>(finishedFlow)
 class NoAnswerReceived<T: Flow>(finishedFlow: T) : FlowResult.NotFailedEnd<T>(finishedFlow)

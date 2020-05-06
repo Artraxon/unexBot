@@ -3,6 +3,7 @@ package de.rtrx.a.unex
 import com.google.inject.Provides
 import com.google.inject.Scopes
 import com.google.inject.TypeLiteral
+import com.google.inject.assistedinject.FactoryModuleBuilder
 import com.google.inject.name.Names
 import com.uchuhimo.konf.Config
 import de.rtrx.a.RedditSpec
@@ -65,6 +66,7 @@ class UnexFlowModule(private val options: Map<String, Any>): KotlinModule() {
         bind(RedditClient::class.java).toInstance(redditClient)
         bind(Config::class.java).toInstance(config)
 
+
         bind(IsolationStrategy::class.java).to(SingleFlowIsolation::class.java)
 
         bind(IncomingMessageFactory::class.java).toInstance(incomingMessageFactory)
@@ -88,6 +90,8 @@ class UnexFlowModule(private val options: Map<String, Any>): KotlinModule() {
         bind(object : TypeLiteral<@kotlin.jvm.JvmSuppressWildcards ReceiveChannel<SubmissionReference>>() {})
                 .toInstance(newPostsOutput)
         bind(object : TypeLiteral<MonitorFactory<*, *>>() {}).to(DBCheckFactory::class.java)
+
+        bind(DelayedDeleteFactory::class.java).to(RedditDelayedDeleteFactory::class.java)
         bind(UnexFlowFactory::class.java).to(RedditUnexFlowFactory::class.java)
         bind(CoroutineScope::class.java).annotatedWith(Names.named("launcherScope"))
                 .toInstance(CoroutineScope(Dispatchers.Default))

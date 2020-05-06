@@ -2,7 +2,6 @@ package de.rtrx.a.flow
 
 import com.nhaarman.mockitokotlin2.*
 import com.uchuhimo.konf.Config
-import com.uchuhimo.konf.source.DefaultLoaders
 import com.uchuhimo.konf.source.Source
 import de.rtrx.a.RedditSpec
 import de.rtrx.a.database.DummyLinkage
@@ -21,6 +20,7 @@ import net.dean.jraw.models.DistinguishedStatus
 import net.dean.jraw.models.Message
 import net.dean.jraw.models.Submission
 import net.dean.jraw.references.CommentReference
+import net.dean.jraw.references.PublicContributionReference
 import net.dean.jraw.references.SubmissionReference
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -51,7 +51,7 @@ class UnexFlowTest {
             "reddit.scoring.timeUntilRemoval" to "1000",
             "reddit.messages.unread.maxTimeDistance" to "300000"
     ))
-    val messagesConfig = spy(Config { addSpec(RedditSpec) }.withSource(configValues))
+    val config = spy(Config { addSpec(RedditSpec) }.withSource(configValues))
     val ownMessageID = "TestMessageID"
     val author = "Testauthor"
     val submissionID = "xxxxx"
@@ -102,7 +102,7 @@ class UnexFlowTest {
             on { body }.doReturn(this@UnexFlowTest.reason)
             on { firstMessage }.doReturn(this@UnexFlowTest.ownMessageID)
         }
-        conversation = spy(DefferedConversation(messagesConfig))
+        conversation = spy(DefferedConversation(config))
         comment = mock()
         commentReference = mock()
         stub = spy(FlowStub(
@@ -126,13 +126,24 @@ class UnexFlowTest {
                         return comment to commentReference
                     }
                 },
-                object : Unignorer { override fun invoke(p1: SubmissionReference) { } },
+                object : Unignorer { override fun invoke(p1: PublicContributionReference) { } },
                 sentMessageEvent,
                 incomingMessagesEvent,
-                messagesConfig,
+                config,
                 linkage,
                 monitorBuilder,
-                conversation)
+                conversation,
+                object: DelayedDeleteFactory {
+                    override fun create(publicContribution: PublicContributionReference, scope: CoroutineScope): DelayedDelete {
+                        return RedditDelayedDelete(
+                                config[RedditSpec.scoring.timeUntilRemoval],
+                                config[RedditSpec.messages.sent.timeSaved],
+                                linkage,
+                                object : Unignorer { override fun invoke(p1: PublicContributionReference) { } },
+                                submissionRef,
+                                CoroutineScope(Dispatchers.Default)
+                        ) }
+                })
 
         stub.setOuter(flow)
     }
@@ -186,8 +197,8 @@ class UnexFlowTest {
 
     @Test
     fun `no Answer`() {
-        doReturn(1L).whenever(messagesConfig)[RedditSpec.scoring.timeUntilRemoval]
-        doReturn(10L).whenever(messagesConfig)[RedditSpec.messages.sent.timeSaved]
+        doReturn(1L).whenever(config)[RedditSpec.scoring.timeUntilRemoval]
+        doReturn(10L).whenever(config)[RedditSpec.messages.sent.timeSaved]
         doReturn(true)
                 .whenever(linkage).createCheckSelectValues( any(), anyOrNull(), anyOrNull(), any(), any() )
 
@@ -203,8 +214,8 @@ class UnexFlowTest {
 
     @Test
     fun `late Answer`() {
-        doReturn(1L).whenever(messagesConfig)[RedditSpec.scoring.timeUntilRemoval]
-        doReturn(1000L).whenever(messagesConfig)[RedditSpec.messages.sent.timeSaved]
+        doReturn(1L).whenever(config)[RedditSpec.scoring.timeUntilRemoval]
+        doReturn(1000L).whenever(config)[RedditSpec.messages.sent.timeSaved]
         doReturn(true)
                 .whenever(linkage).createCheckSelectValues( any(), anyOrNull(), anyOrNull(), any(), any() )
 
@@ -245,8 +256,8 @@ class UnexFlowTest {
     fun `No Removal upon approval`(){
         doReturn(false)
                 .whenever(linkage).createCheckSelectValues( any(), anyOrNull(), anyOrNull(), any(), any() )
-        doReturn(1L).whenever(messagesConfig)[RedditSpec.scoring.timeUntilRemoval]
-        doReturn(10L).whenever(messagesConfig)[RedditSpec.messages.sent.timeSaved]
+        doReturn(1L).whenever(config)[RedditSpec.scoring.timeUntilRemoval]
+        doReturn(10L).whenever(config)[RedditSpec.messages.sent.timeSaved]
 
 
         val result = runBlocking {

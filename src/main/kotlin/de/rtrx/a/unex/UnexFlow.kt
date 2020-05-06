@@ -32,13 +32,12 @@ class UnexFlow(
         private val callback: Callback<in FlowResult<UnexFlow>, Unit>,
         private val composingFn: MessageComposer,
         private val replyFn: Replyer,
-        private val unignoreFn: Unignorer,
         private val sentMessages: SentMessageEvent,
         private val incomingMessages: IncomingMessagesEvent,
-        private val config: Config,
         private val linkage: Linkage,
         private val monitorBuilder: MonitorBuilder<*>,
-        private val conversation: Conversation
+        private val conversation: Conversation,
+        private val delayedDeleteFactory: DelayedDeleteFactory
 ) : IFlowStub<SubmissionReference> by flowStub,
         Flow{
 
@@ -68,35 +67,14 @@ class UnexFlow(
 
                 composingFn(initValue.inspect().author, initValue.inspect().permalink)
 
-                val deletionJob = launch {
-                    try {
-                        delay(config[RedditSpec.scoring.timeUntilRemoval])
-                        removeSubmission.start()
-                        delay(config[RedditSpec.messages.sent.timeSaved] - config[RedditSpec.scoring.timeUntilRemoval])
-                    } catch (e: CancellationException) {
-                    }
-                }
+                val deletion = delayedDeleteFactory.create(initValue, this)
+                deletion.start()
+                val answered = deletion.safeSelectTo(awaitedReply.onAwait)
 
-                val answered = select<Boolean> {
-                    awaitedReply.onAwait {
-                        logger.trace("Received Reply for ${initValue.fullName}")
-                        deletionJob.cancel()
-                        if (removeSubmission.isActive || removeSubmission.isCompleted) {
-                            removeSubmission.join()
-                            initValue.approve()
-                            unignoreFn(initValue)
-                            logger.trace("Reapproved ${initValue.fullName}")
-                        }
-                        true
-                    }
-                    deletionJob.onJoin {
-                        logger.trace("Didn't receive an answer for ${initValue.fullName}")
-                        callback(NoAnswerReceived(this@UnexFlow))
-                        false
-                    }
+                if (!answered) {
+                    callback(NoAnswerReceived(this@UnexFlow))
+                    return@launch
                 }
-
-                if (!answered) return@launch
                 val reply = awaitedReply.getCompleted()
 
 
