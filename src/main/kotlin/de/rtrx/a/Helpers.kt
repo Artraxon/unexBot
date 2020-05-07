@@ -3,6 +3,7 @@ package de.rtrx.a
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
+import com.uchuhimo.konf.Config
 import com.uchuhimo.konf.source.asTree
 import de.rtrx.a.database.Linkage
 import kotlinx.coroutines.CompletableDeferred
@@ -49,5 +50,7 @@ fun Throwable.getStackTraceString(): String{
     this.printStackTrace(PrintWriter(sw))
     return sw.toString()
 }
+
+fun String.toSupplier(): (Config) -> String { return { this } }
 
 

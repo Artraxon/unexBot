@@ -64,6 +64,14 @@ class UnexFlowModule(private val options: Map<String, Any>): KotlinModule() {
 
     override fun configure() {
         if((options.get("useDB") as Boolean?) ?: true){
+            bind(typeLiteral<List<(Config) -> String>>()).annotatedWith(Names.named("ddlFunctions")).toInstance(
+                    with(DDL.Companion.Functions){listOf(
+                            addParentIfNotExists,
+                            commentIfNotExists,
+                            commentWithMessage,
+                            createCheck,
+                            redditUsername
+                    )})
             bind(Linkage::class.java).to(PostgresSQLinkage::class.java).`in`(Scopes.SINGLETON)
             bind(DDL::class.java)
         } else bind(Linkage::class.java).to(DummyLinkage::class.java)
@@ -113,6 +121,31 @@ class UnexFlowModule(private val options: Map<String, Any>): KotlinModule() {
         bind(Unignorer::class.java).to(RedditUnignorer::class.java)
         bind(MonitorBuilder::class.java).to(DBCheckBuilder::class.java)
         bind(UnexFlowDispatcher::class.java)
+    }
+
+    fun bindDDL(){
+        bind(typeLiteral<List<(Config) -> String>>()).annotatedWith(Names.named("ddlFunctions")).toInstance(
+                with(DDL.Companion.Functions){listOf(
+                        addParentIfNotExists,
+                        commentIfNotExists,
+                        commentWithMessage,
+                        createCheck,
+                        redditUsername
+                )})
+        bind(typeLiteral<List<(Config) -> String>>()).annotatedWith(Names.named("ddlFunctions")).toInstance(
+                with(DDL.Companion.Tables) {
+                    listOf(
+                            submissions,
+                            relevantMessages,
+                            comments,
+                            comments_caused,
+                            commentsHierarchy,
+                            check,
+                            top_posts,
+                            unexScore
+                    )
+                }
+        )
     }
 
 
