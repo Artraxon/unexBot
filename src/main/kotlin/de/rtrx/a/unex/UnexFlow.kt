@@ -4,13 +4,13 @@ import com.uchuhimo.konf.Config
 import de.rtrx.a.RedditSpec
 import de.rtrx.a.database.Linkage
 import de.rtrx.a.flow.*
-import de.rtrx.a.flow.events.EventType
-import de.rtrx.a.flow.events.IncomingMessagesEvent
-import de.rtrx.a.flow.events.SentMessageEvent
-import de.rtrx.a.monitor.Monitor
-import de.rtrx.a.monitor.MonitorBuilder
-import de.rtrx.a.monitor.MonitorFactory
+import de.rtrx.a.flow.events.*
+import de.rtrx.a.flow.events.comments.CommentsFetchedEvent
+import de.rtrx.a.flow.events.comments.FullComments
+import de.rtrx.a.flow.events.comments.ManuallyFetchedEvent
+import de.rtrx.a.monitor.*
 import kotlinx.coroutines.*
+import kotlinx.coroutines.channels.ReceiveChannel
 import kotlinx.coroutines.selects.select
 import mu.KotlinLogging
 import net.dean.jraw.RedditClient
@@ -22,7 +22,6 @@ import net.dean.jraw.references.CommentReference
 import net.dean.jraw.references.SubmissionReference
 import javax.inject.Inject
 import javax.inject.Provider
-
 private val logger = KotlinLogging.logger { }
 /**
  * @param composingFn Function that sends the message to the user. First Argument is the recipient, second one the url to the post
@@ -34,8 +33,9 @@ class UnexFlow(
         private val replyFn: Replyer,
         private val sentMessages: SentMessageEvent,
         private val incomingMessages: IncomingMessagesEvent,
+        private val commentsFetchedEvent: ManuallyFetchedEvent,
         private val linkage: Linkage,
-        private val monitorBuilder: MonitorBuilder<*>,
+        private val monitorBuilder: IDBCheckBuilder,
         private val conversation: Conversation,
         private val delayedDeleteFactory: DelayedDeleteFactory
 ) : IFlowStub<SubmissionReference> by flowStub,
@@ -46,7 +46,7 @@ class UnexFlow(
     val incompletableDefferedComment: Deferred<Comment> get() = defferedComment
     val comment get() = defferedComment.getCompleted()
 
-    lateinit var monitor: Monitor
+    lateinit var monitor: IDBCheck
 
     override suspend fun start() {
         launch {
@@ -75,6 +75,8 @@ class UnexFlow(
                 }
                 val reply = awaitedReply.getCompleted()
 
+                unsubscribe(sentMessages)
+                unsubscribe(incomingMessages)
 
                 val (comment, ref) = replyFn(initValue.inspect(), reply.body)
                 defferedComment.complete(comment)
@@ -82,9 +84,12 @@ class UnexFlow(
                 ref.distinguish(DistinguishedStatus.MODERATOR, true)
                 linkage.commentMessage(initValue.id, reply, comment)
 
+
                 logger.trace("Starting Monitor for ${initValue.fullName}")
-                monitor = monitorBuilder.setBotComment(comment).build(initValue)
+                monitor = monitorBuilder.setCommentEvent(commentsFetchedEvent).setBotComment(comment).build(initValue)
+                subscribe(monitor::saveToDB, commentsFetchedEvent)
                 monitor.start()
+                unsubscribe(commentsFetchedEvent)
 
                 callback(FlowResult.NotFailedEnd.RegularEnd(this@UnexFlow))
 
@@ -108,19 +113,18 @@ interface UnexFlowFactory : FlowFactory<UnexFlow, SubmissionReference>{
 }
 
 class RedditUnexFlowFactory @Inject constructor(
-        private val config: Config,
         private val composingFn: MessageComposer,
         private val replyFn: Replyer,
-        private val unignoreFn: Unignorer,
-        private val monitorFactory: MonitorFactory<*, *>,
+        private val monitorFactory: MonitorFactory<IDBCheck, IDBCheckBuilder>,
         private val linkage: Linkage,
         private val conversationFactory: Provider<Conversation>,
-        private val delayedDeleteFactory: DelayedDeleteFactory
+        private val delayedDeleteFactory: DelayedDeleteFactory,
+        private val multiplexerProvider: Provider<EventMultiplexerBuilder<FullComments, *, ReceiveChannel<FullComments>>>
 ) : UnexFlowFactory {
     private lateinit var _sentMessages: SentMessageEvent
     private lateinit var _incomingMessages: IncomingMessagesEvent
 
-    override fun create(dispatcher: FlowDispatcherInterface<UnexFlow>, initValue: SubmissionReference, callback: Callback<FlowResult<UnexFlow>, Unit>): UnexFlow {
+    override suspend fun create(dispatcher: FlowDispatcherInterface<UnexFlow>, initValue: SubmissionReference, callback: Callback<FlowResult<UnexFlow>, Unit>): UnexFlow {
         val stub = FlowStub(
                 initValue,
                 { unexFlow: UnexFlow, fn: suspend (Any) -> Unit, type: EventType<Any> ->
@@ -129,6 +133,7 @@ class RedditUnexFlowFactory @Inject constructor(
                 dispatcher::unsubscribe,
                 CoroutineScope(Dispatchers.Default)
         )
+
         val flow = UnexFlow(
                 stub,
                 callback,
@@ -136,6 +141,7 @@ class RedditUnexFlowFactory @Inject constructor(
                 replyFn,
                 _sentMessages,
                 _incomingMessages,
+                dispatcher.createNewEvent(ManuallyFetchedEvent::class, initValue,multiplexerProvider.get())  ,
                 linkage,
                 monitorFactory.get(),
                 conversationFactory.get(),
@@ -152,4 +158,5 @@ class RedditUnexFlowFactory @Inject constructor(
     override fun setIncomingMessages(incomingMessages: IncomingMessagesEvent) {
         if (!this::_incomingMessages.isInitialized) this._incomingMessages = incomingMessages
     }
+
 }

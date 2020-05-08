@@ -1,6 +1,7 @@
 package de.rtrx.a.flow
 
 import kotlinx.coroutines.*
+import mu.KotlinLogging
 import java.util.concurrent.Executors
 
 interface IsolationStrategy{
@@ -8,7 +9,7 @@ interface IsolationStrategy{
      * Executes a list of functions with the context of the flow.
      * @param data Some Object that is passed to the functions as an argument
      */
-    fun <R> executeEach(data: R, flow: Flow, fns: List<suspend (R) -> Unit>)
+    fun <R> executeEach(data: R, flow: Flow, fns: Collection<suspend (R) -> Unit>)
 
     /**
      * Removes the current Context for the flow and does cleanup.
@@ -31,9 +32,9 @@ interface IsolationStrategy{
 class SingleFlowIsolation: IsolationStrategy {
     val flows = mutableMapOf<Flow, ExecutorCoroutineDispatcher>()
     val executorRoutine = CoroutineScope(Dispatchers.Default)
-    override fun <R> executeEach(data: R, flow: Flow, fns: List<suspend (R) -> Unit>) {
+    override fun <R> executeEach(data: R, flow: Flow, fns: Collection<suspend (R) -> Unit>) {
         executorRoutine.launch(flows.getOrPut(flow) { Executors.newSingleThreadExecutor().asCoroutineDispatcher() }) {
-             for (fn in fns) fn(data)
+             for (fn in fns) try { fn(data) } catch (e: Throwable) { KotlinLogging.logger {  }.error { e.message }}
         }
     }
 

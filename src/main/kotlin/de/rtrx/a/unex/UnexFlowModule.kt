@@ -10,6 +10,8 @@ import de.rtrx.a.RedditSpec
 import de.rtrx.a.database.*
 import de.rtrx.a.flow.*
 import de.rtrx.a.flow.events.*
+import de.rtrx.a.flow.events.comments.CommentsFetcherFactory
+import de.rtrx.a.flow.events.comments.ManuallyFetchedEvent
 import de.rtrx.a.initConfig
 import de.rtrx.a.monitor.*
 import dev.misfitlabs.kotlinguice4.KotlinModule
@@ -17,6 +19,7 @@ import dev.misfitlabs.kotlinguice4.typeLiteral
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.ReceiveChannel
+import kotlinx.coroutines.runBlocking
 import mu.KotlinLogging
 import net.dean.jraw.RedditClient
 import net.dean.jraw.http.OkHttpNetworkAdapter
@@ -26,9 +29,11 @@ import net.dean.jraw.oauth.Credentials
 import net.dean.jraw.oauth.OAuthHelper
 import net.dean.jraw.references.PublicContributionReference
 import net.dean.jraw.references.SubmissionReference
+import org.w3c.dom.events.Event
 import java.lang.Exception
 import javax.inject.Named
 import javax.inject.Provider
+import kotlin.reflect.KClass
 
 class UnexFlowModule(private val options: Map<String, Any>): KotlinModule() {
     val config: Config
@@ -43,7 +48,9 @@ class UnexFlowModule(private val options: Map<String, Any>): KotlinModule() {
         config = initConfig(options.get("configPath") as String?)
         redditClient = initReddit(config)
 
-        val (newPosts, outChannel) = RedditNewPostReferenceFactory(config, redditClient).create(config[RedditSpec.subreddit])
+        val (newPosts, outChannel) =
+                runBlocking { RedditNewPostReferenceFactory(config, redditClient).create(config[RedditSpec.subreddit]) }
+
         this.newPostEvent = newPosts
         newPostsOutput = outChannel
 
@@ -55,12 +62,21 @@ class UnexFlowModule(private val options: Map<String, Any>): KotlinModule() {
     fun provideDispatcherStub(
             newPosts: ReceiveChannel<SubmissionReference>,
             flowFactory: UnexFlowFactory,
-            @Named("launcherScope") launcherScope: CoroutineScope
-    ) : IFlowDispatcherStub<UnexFlow, UnexFlowFactory> = FlowDispatcherStub(newPosts, flowFactory, launcherScope)
+            @Named("launcherScope") launcherScope: CoroutineScope,
+            eventFactories:  EventFactories
+    ) : IFlowDispatcherStub<UnexFlow, UnexFlowFactory> = FlowDispatcherStub(newPosts, flowFactory, launcherScope, eventFactories)
 
     @Provides
     fun provideApprovedCheck(linkage: Linkage) = DelayedDelete.approvedCheck(linkage)
 
+    @Provides
+    fun provideEventFactories(
+            manuallyFetchedFactory: CommentsFetcherFactory
+    ): EventFactories {
+        return mapOf(
+                ManuallyFetchedEvent::class to (manuallyFetchedFactory to SubmissionReference::class)
+        )
+    }
 
     override fun configure() {
         if((options.get("useDB") as Boolean?) ?: true){
@@ -105,7 +121,9 @@ class UnexFlowModule(private val options: Map<String, Any>): KotlinModule() {
         bind(object : TypeLiteral<MonitorFactory<*, *>>() {}).to(DBCheckFactory::class.java)
 
         bind(Long::class.java).annotatedWith(Names.named("delayToDeleteMillis")).toInstance(config[RedditSpec.scoring.timeUntilRemoval])
-        bind(Long::class.java).annotatedWith(Names.named("delayToFinishMillis")).toInstance(config[RedditSpec.messages.sent.timeSaved])
+        bind(Long::class.java)
+                .annotatedWith(Names.named("delayToFinishMillis"))
+                .toInstance(config[RedditSpec.messages.sent.timeSaved] - config[RedditSpec.scoring.timeUntilRemoval])
 
         install(FactoryModuleBuilder()
                 .implement(DelayedDelete::class.java, RedditDelayedDelete::class.java)

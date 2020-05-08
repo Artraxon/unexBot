@@ -75,7 +75,7 @@ interface Linkage {
 
     fun createCheck(jsonData: JsonObject, botComment: Comment?, stickied_comment: Comment?, top_comments: Array<Comment>): Pair<Boolean, List<Comment>>
 
-    fun add_parent(child: Comment, parent: Comment): Boolean
+    fun add_parent(child: String, parent: String): Boolean
 
 }
 
@@ -94,7 +94,7 @@ class DummyLinkage:Linkage {
     }
 
     override fun commentMessage(submission_id: String, message: Message, comment: Comment) = 1
-    override fun add_parent(child: Comment, parent: Comment): Boolean {
+    override fun add_parent(child: String, parent: String): Boolean {
         return true
     }
 
@@ -217,10 +217,10 @@ class PostgresSQLinkage @Inject constructor(private val redditClient: RedditClie
 
     }
 
-    override fun add_parent(child: Comment, parent: Comment): Boolean {
+    override fun add_parent(child: String, parent: String): Boolean {
         val pst = connection.prepareStatement("SELECT * FROM add_parent_if_not_exists(?, ?)")
-        pst.setString(1, child.id)
-        pst.setString(2, parent.id)
+        pst.setString(1, child)
+        pst.setString(2, parent)
         return try {
             pst.execute()
             true

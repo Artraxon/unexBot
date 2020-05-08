@@ -10,6 +10,10 @@ import de.rtrx.a.flow.events.EventType
 import de.rtrx.a.flow.events.IncomingMessagesEvent
 import de.rtrx.a.flow.events.MessageEvent
 import de.rtrx.a.flow.events.SentMessageEvent
+import de.rtrx.a.flow.events.comments.FullComments
+import de.rtrx.a.flow.events.comments.ManuallyFetchedEvent
+import de.rtrx.a.monitor.IDBCheck
+import de.rtrx.a.monitor.IDBCheckBuilder
 import de.rtrx.a.monitor.Monitor
 import de.rtrx.a.monitor.MonitorBuilder
 import de.rtrx.a.unex.*
@@ -39,10 +43,11 @@ class UnexFlowTest {
     lateinit var commentReference: CommentReference
     lateinit var linkage: Linkage
     lateinit var stub: FlowStub<SubmissionReference, UnexFlow>
-    lateinit var monitor: Monitor
-    lateinit var monitorBuilder: MonitorBuilder<*>
+    lateinit var monitor: IDBCheck
+    lateinit var monitorBuilder: IDBCheckBuilder
     lateinit var conversation: DefferedConversation
     lateinit var delayedDeleteFactory: DelayedDeleteFactory
+    lateinit var manuallyFetchedEvent: ManuallyFetchedEvent
 
     private val sentMessageEvent = object : SentMessageEvent {}
     private val incomingMessagesEvent = object : IncomingMessagesEvent {}
@@ -77,10 +82,14 @@ class UnexFlowTest {
 
     @BeforeEach
     fun setup(){
-        monitor = spy(object : Monitor{ override suspend fun start() { } })
+        monitor = spy(object : IDBCheck{
+            override suspend fun saveToDB(fullComments: FullComments) { }
+            override suspend fun start() { } })
+
         monitorBuilder = mock {
             on {build(any())}.doReturn(monitor)
             on {setBotComment(any())}.doReturn(this.mock)
+            on { setCommentEvent(any())}.doReturn(this.mock)
         }
         linkage = spy(DummyLinkage())
         var submissionRemoved = false
@@ -115,6 +124,9 @@ class UnexFlowTest {
                             scope: CoroutineScope
                     ) = createDeletion(config[RedditSpec.scoring.timeUntilRemoval], config[RedditSpec.messages.sent.timeSaved])
                 })
+
+        manuallyFetchedEvent = mock()
+
         stub = spy(FlowStub(
                 submissionRef,
                 {flow: UnexFlow, fn, type -> subscribeCalls.add(Triple(flow, fn, type))},
@@ -138,6 +150,7 @@ class UnexFlowTest {
                 },
                 sentMessageEvent,
                 incomingMessagesEvent,
+                manuallyFetchedEvent,
                 linkage,
                 monitorBuilder,
                 conversation,
@@ -155,8 +168,8 @@ class UnexFlowTest {
             { assert(this.commentText == reply.body)},
             { assert(this.submission.isRemoved.not())},
             { verify(commentReference).distinguish(DistinguishedStatus.MODERATOR, true) },
-            { verify(stub, times(1)).subscribe(any(), argThat<MessageEvent> { this is IncomingMessagesEvent})},
-            { verify(stub, times(1)).subscribe(any(), argThat<MessageEvent> { this is SentMessageEvent })},
+            { runBlocking { verify(stub, times(1)).subscribe(any(), argThat<EventType<*>> { this is IncomingMessagesEvent})} },
+            { runBlocking { verify(stub, times(1)).subscribe(any(), argThat<EventType<*>> { this is SentMessageEvent })}},
             { verify(linkage, times(1)).insertSubmission(submission)},
             { verify(linkage, times(1)).commentMessage(submissionID, reply, comment)},
             { runBlocking {  verify(monitor).start()} })
@@ -255,8 +268,8 @@ class UnexFlowTest {
 
         assertAll(
                 { assert(result is SubmissionAlreadyPresent) },
-                { verify(stub, never()).subscribe(any(), argThat<MessageEvent> { this is IncomingMessagesEvent})},
-                { verify(stub, never()).subscribe(any(), argThat<MessageEvent> { this is SentMessageEvent })})
+                { runBlocking { verify(stub, never()).subscribe(any(), argThat<MessageEvent> { this is IncomingMessagesEvent }) }},
+                { runBlocking { verify(stub, never()).subscribe(any(), argThat<MessageEvent> { this is SentMessageEvent }) } })
 
     }
 

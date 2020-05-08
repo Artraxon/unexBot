@@ -1,6 +1,7 @@
 package de.rtrx.a.monitor
 
 import net.dean.jraw.models.Comment
+import net.dean.jraw.references.CommentReference
 import net.dean.jraw.references.SubmissionReference
 import javax.inject.Provider
 

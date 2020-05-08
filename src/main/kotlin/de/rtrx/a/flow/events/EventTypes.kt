@@ -22,8 +22,9 @@ import kotlin.coroutines.CoroutineContext
 
 
 /**
-Represents a real event on the Reddit API Side
- **/
+* Represents a real event on the Reddit API Side
+ * @param R The Type of the data that is being produced
+**/
 interface EventType<out R: Any>
 
 /**
@@ -38,7 +39,12 @@ abstract class EventStream<out R: Any>(_outReceiver: (() -> ReceiveChannel<R>) -
     }
 }
 
-interface EventTypeFactory<E: EventType<R>, R: Any, I: Any>{
+/**
+ * @param E The type of the Event
+ * @param R Type of [E]
+ * @param I Type of the ID that can be used to get an Event
+ */
+interface EventTypeFactory<E: EventType<R>, R: Any, in I>{
     fun create(id: I): Pair<E, ReceiveChannel<R>>
 }
 
@@ -166,3 +172,4 @@ class MarkAsReadFlow @Inject constructor(private val redditClient: RedditClient)
 
     override val coroutineContext: CoroutineContext = Dispatchers.Default
 }
+

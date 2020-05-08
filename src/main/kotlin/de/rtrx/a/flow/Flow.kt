@@ -31,12 +31,12 @@ interface FlowBuilder<T: Flow,M: Any> {
     * Sets a method that can be used by the flow to subscribe to event types that it is interested in
     * @param R The type of the item that should be passed later on
      * **/
-    fun <R: Any> setSubscribeAccess(access: (T, suspend (R) -> Unit, EventType<R>) -> Unit): FlowBuilder<T, M>
+    fun <R: Any> setSubscribeAccess(access: suspend (T, suspend (R) -> Unit, EventType<R>) -> Unit): FlowBuilder<T, M>
 
     /**
      * Sets a method that can be used by the flow to unsubscribe from event types
      */
-    fun setUnsubscribeAccess(access: (T, EventType<*>) -> Unit): FlowBuilder<T, M>
+    fun setUnsubscribeAccess(access: suspend (T, EventType<*>) -> Unit): FlowBuilder<T, M>
 
     /**
      * Sets the Coroutine Scope for the Flow
@@ -54,16 +54,16 @@ abstract class FlowBuilderDSL <T, M: Any > : FlowBuilder<T, M>
               T : Flow{
     protected var _initValue: M? = null
     protected var _callback: Callback<in FlowResult<T>, Unit> = Callback {_ -> Unit}
-    protected var _subscribeAccess: (T, suspend (Any) -> Unit, EventType<*>) -> Unit = { _, _, _ -> Unit}
-    protected var _unsubscribeAccess: (T, EventType<*>) -> Unit = { _, _ -> Unit}
+    protected var _subscribeAccess: suspend (T, suspend (Any) -> Unit, EventType<*>) -> Unit = { _, _, _ -> Unit}
+    protected var _unsubscribeAccess: suspend (T, EventType<*>) -> Unit = { _, _ -> Unit}
     protected var _scope: CoroutineScope = CoroutineScope(Dispatchers.Default)
 
-    override fun <R: Any> setSubscribeAccess(access: (T, suspend (R) -> Unit, EventType<R>) -> Unit): FlowBuilder<T, M> {
+    override fun <R: Any> setSubscribeAccess(access: suspend (T, suspend (R) -> Unit, EventType<R>) -> Unit): FlowBuilder<T, M> {
         _subscribeAccess = {flow, function, type: EventType<*> -> access(flow, function, type as EventType<R>)}
         return this
     }
 
-    override fun setUnsubscribeAccess(access: (T, EventType<*>) -> Unit): FlowBuilder<T, M> {
+    override fun setUnsubscribeAccess(access: suspend (T, EventType<*>) -> Unit): FlowBuilder<T, M> {
         _unsubscribeAccess = access
         return this
     }
@@ -91,7 +91,7 @@ abstract class FlowBuilderDSL <T, M: Any > : FlowBuilder<T, M>
 }
 
 interface FlowFactory<T: Flow, M: Any>{
-    fun create(dispatcher: FlowDispatcherInterface<T>, initValue: M, callback: Callback<FlowResult<T>, Unit>): T
+    suspend fun create(dispatcher: FlowDispatcherInterface<T>, initValue: M, callback: Callback<FlowResult<T>, Unit>): T
 }
 
 
@@ -102,8 +102,8 @@ interface IFlowStub<M> {
     val initValue: M
     val coroutineContext: CoroutineContext
 
-    fun <R: Any> subscribe(function: suspend (R) -> Unit, type: EventType<R>)
-    fun <R: Any> unsubscribe(type: EventType<R>)
+    suspend fun <R: Any> subscribe(function: suspend (R) -> Unit, type: EventType<R>)
+    suspend fun <R: Any> unsubscribe(type: EventType<R>)
 }
 
 /**
@@ -111,19 +111,19 @@ interface IFlowStub<M> {
  */
 class FlowStub <M, C: IFlowStub<M>> (
         override val initValue: M,
-        private val _subscribeAccess: (C, suspend (Any) -> Unit, EventType<*>) -> Unit,
-        private val _unsubscribeAccess: (C, EventType<*>) -> Unit,
+        private val _subscribeAccess: suspend (C, suspend (Any) -> Unit, EventType<*>) -> Unit,
+        private val _unsubscribeAccess: suspend (C, EventType<*>) -> Unit,
         private val scope: CoroutineScope)
     : IFlowStub<M> {
     private var outer: C? = null
 
     fun setOuter(outer: C) = if(this.outer == null) this.outer = outer else Unit
 
-    override fun <R: Any> subscribe(function: suspend (R) -> Unit, type: EventType<R>) {
+    override suspend fun <R: Any> subscribe(function: suspend (R) -> Unit, type: EventType<R>) {
         _subscribeAccess(outer!!, { event: Any -> function(event as R) } , type)
     }
 
-    override fun <R: Any> unsubscribe(type: EventType<R>) {
+    override suspend fun <R: Any> unsubscribe(type: EventType<R>) {
         _unsubscribeAccess(outer!!, type)
     }
 

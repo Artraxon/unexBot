@@ -5,6 +5,8 @@ import de.rtrx.a.flow.IsolationStrategy
 import de.rtrx.a.flow.SingleFlowIsolation
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.ReceiveChannel
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.ConcurrentLinkedQueue
 import javax.inject.Inject
 
 interface EventMultiplexer<R: Any> {
@@ -13,6 +15,11 @@ interface EventMultiplexer<R: Any> {
     fun removeListeners(flow: Flow)
 }
 
+/**
+ * @param R The Type that's going to be passed to the listeners
+ * @param X The Produced Multiplexer
+ * @param O The Origin of the data
+ */
 @JvmSuppressWildcards
 interface EventMultiplexerBuilder<R: Any, out X: EventMultiplexer<R>, in O> {
     fun build() : X
@@ -27,7 +34,7 @@ interface EventMultiplexerBuilder<R: Any, out X: EventMultiplexer<R>, in O> {
 
 @JvmSuppressWildcards
 class SimpleMultiplexer<R: Any> @Inject constructor(private val origin: ReceiveChannel<@JvmSuppressWildcards R>, private val isolationStrategy: IsolationStrategy): EventMultiplexer<R> {
-    private val listeners: MutableMap<Flow, List<suspend (R) -> Unit>> = mutableMapOf()
+    private val listeners: MutableMap<Flow, ConcurrentLinkedQueue<suspend (R) -> Unit>> = ConcurrentHashMap()
 
     init {
         CoroutineScope(Dispatchers.Default).launch {
@@ -39,7 +46,7 @@ class SimpleMultiplexer<R: Any> @Inject constructor(private val origin: ReceiveC
         }
     }
     override fun addListener(flow: Flow, fn: suspend (R) -> Unit) {
-        listeners[flow] = listeners.getOrDefault( flow, emptyList() ) + fn
+        listeners.getOrDefault( flow, ConcurrentLinkedQueue() ).add(fn)
     }
 
     override fun removeListeners(flow: Flow) {

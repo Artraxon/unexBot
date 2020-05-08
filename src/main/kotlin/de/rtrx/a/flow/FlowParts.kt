@@ -252,7 +252,10 @@ class RedditDelayedDelete @AssistedInject constructor(
     private fun remove(): Deferred<DelayedDelete.DeleteResult> {
         return scope.async (start = CoroutineStart.LAZY) {
             val willRemove = preventsDeletion(publicContribution)
-            if(!willRemove.bool) publicContribution.remove()
+            if(!willRemove.bool) {
+                publicContribution.remove()
+                logger.trace { "Contribution ${publicContribution.fullName} removed" }
+            } else logger.info { "Contribution ${publicContribution.fullName} not removed because it was manually approved" }
             willRemove
         }
     }
