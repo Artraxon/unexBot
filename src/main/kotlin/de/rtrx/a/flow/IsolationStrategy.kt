@@ -2,8 +2,10 @@ package de.rtrx.a.flow
 
 import kotlinx.coroutines.*
 import mu.KotlinLogging
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 
+private val logger = KotlinLogging.logger {  }
 interface IsolationStrategy{
     /**
      * Executes a list of functions with the context of the flow.
@@ -30,11 +32,11 @@ interface IsolationStrategy{
 }
 
 class SingleFlowIsolation: IsolationStrategy {
-    val flows = mutableMapOf<Flow, ExecutorCoroutineDispatcher>()
-    val executorRoutine = CoroutineScope(Dispatchers.Default)
+    val flows = ConcurrentHashMap<Flow, ExecutorCoroutineDispatcher>()
+    val executorRoutine = CoroutineScope(CoroutineName("IsolationStrategy"))
     override fun <R> executeEach(data: R, flow: Flow, fns: Collection<suspend (R) -> Unit>) {
         executorRoutine.launch(flows.getOrPut(flow) { Executors.newSingleThreadExecutor().asCoroutineDispatcher() }) {
-             for (fn in fns) try { fn(data) } catch (e: Throwable) { KotlinLogging.logger {  }.error { e.message }}
+             for (fn in fns) try { fn(data) } catch (e: Throwable) { logger.error { e.message }}
         }
     }
 

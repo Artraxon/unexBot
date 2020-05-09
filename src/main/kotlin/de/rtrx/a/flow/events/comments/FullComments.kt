@@ -39,7 +39,7 @@ class RedditCommentsFetchedFactory @Inject constructor(
         return event to out
     }
 
-    private class RedditCommentsFetchedEvent(
+    private class RedditCommentsFetchedEvent (
             private val submission: SubmissionReference,
             private val redditClient: RedditClient,
             private val config: Config

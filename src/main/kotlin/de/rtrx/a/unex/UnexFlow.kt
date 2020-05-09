@@ -141,7 +141,7 @@ class RedditUnexFlowFactory @Inject constructor(
                 replyFn,
                 _sentMessages,
                 _incomingMessages,
-                dispatcher.createNewEvent(ManuallyFetchedEvent::class, initValue,multiplexerProvider.get())  ,
+                dispatcher.createNewEvent(ManuallyFetchedEvent::class, initValue ,multiplexerProvider.get())  ,
                 linkage,
                 monitorFactory.get(),
                 conversationFactory.get(),

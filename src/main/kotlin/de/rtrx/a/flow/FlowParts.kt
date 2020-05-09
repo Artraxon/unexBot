@@ -21,7 +21,9 @@ import net.dean.jraw.references.PublicContributionReference
 import javax.inject.Named
 
 typealias MessageCheck = (Message) -> Boolean
-typealias DeletePrevention = suspend (PublicContributionReference) -> DelayedDelete.DeleteResult
+interface DeletePrevention{
+    suspend fun check(publicRef: PublicContributionReference): DelayedDelete.DeleteResult
+}
 
 class Callback<T, R>(private val action: (T) -> R) : (T) -> R{
     private var wasCalled = false
@@ -180,15 +182,17 @@ interface DelayedDelete {
     suspend fun safeSelectTo(clause1: SelectClause1<Any?>): DeleteResult
 
     companion object {
-        val approvedCheck: (Linkage) -> DeletePrevention = { linkage ->
-            { publicContribution: PublicContributionReference ->
-                linkage.createCheckSelectValues(
-                        publicContribution.fullName,
-                        null,
-                        null,
-                        emptyArray(),
-                        { if (it.get("approved")?.asBoolean ?: false) NotDeletedApproved() else DeleteResult.WasDeleted() }
-                ).checkResult as DeleteResult
+        val approvedCheck: (Linkage) -> DeletePrevention = { linkage -> object : DeletePrevention
+            {
+                override suspend fun check(publicRef: PublicContributionReference): DeleteResult {
+                    return linkage.createCheckSelectValues(
+                            publicRef.fullName,
+                            null,
+                            null,
+                            emptyArray(),
+                            { if (it.get("approved")?.asBoolean ?: false) NotDeletedApproved() else DeleteResult.WasDeleted() }
+                    ).checkResult as DeleteResult
+                }
             }
         }
         class NotDeletedApproved:DeleteResult.NotDeleted()
@@ -207,7 +211,7 @@ class RedditDelayedDelete @AssistedInject constructor(
         @param:Named("delayToFinishMillis") private val delayToFinishMillis: Long,
         private val linkage: Linkage,
         private val unignorer: Unignorer,
-        private val preventsDeletion: DeletePrevention,
+        private val preventsDeletion: @JvmSuppressWildcards DeletePrevention,
         @param:Assisted private val publicContribution: PublicContributionReference,
         @param:Assisted private val scope: CoroutineScope
 ): DelayedDelete {
@@ -251,7 +255,7 @@ class RedditDelayedDelete @AssistedInject constructor(
 
     private fun remove(): Deferred<DelayedDelete.DeleteResult> {
         return scope.async (start = CoroutineStart.LAZY) {
-            val willRemove = preventsDeletion(publicContribution)
+            val willRemove = preventsDeletion.check(publicContribution)
             if(!willRemove.bool) {
                 publicContribution.remove()
                 logger.trace { "Contribution ${publicContribution.fullName} removed" }

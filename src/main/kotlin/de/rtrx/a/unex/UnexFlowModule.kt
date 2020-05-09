@@ -11,7 +11,9 @@ import de.rtrx.a.database.*
 import de.rtrx.a.flow.*
 import de.rtrx.a.flow.events.*
 import de.rtrx.a.flow.events.comments.CommentsFetcherFactory
+import de.rtrx.a.flow.events.comments.FullComments
 import de.rtrx.a.flow.events.comments.ManuallyFetchedEvent
+import de.rtrx.a.flow.events.comments.RedditCommentsFetchedFactory
 import de.rtrx.a.initConfig
 import de.rtrx.a.monitor.*
 import dev.misfitlabs.kotlinguice4.KotlinModule
@@ -63,31 +65,49 @@ class UnexFlowModule(private val options: Map<String, Any>): KotlinModule() {
             newPosts: ReceiveChannel<SubmissionReference>,
             flowFactory: UnexFlowFactory,
             @Named("launcherScope") launcherScope: CoroutineScope,
-            eventFactories:  EventFactories
-    ) : IFlowDispatcherStub<UnexFlow, UnexFlowFactory> = FlowDispatcherStub(newPosts, flowFactory, launcherScope, eventFactories)
-
-    @Provides
-    fun provideApprovedCheck(linkage: Linkage) = DelayedDelete.approvedCheck(linkage)
-
-    @Provides
-    fun provideEventFactories(
             manuallyFetchedFactory: CommentsFetcherFactory
-    ): EventFactories {
-        return mapOf(
-                ManuallyFetchedEvent::class to (manuallyFetchedFactory to SubmissionReference::class)
-        )
+    ) : IFlowDispatcherStub<UnexFlow, UnexFlowFactory> = FlowDispatcherStub(newPosts, flowFactory, launcherScope,
+            mapOf( ManuallyFetchedEvent::class to (manuallyFetchedFactory to SubmissionReference::class) ) as EventFactories )
+
+    @Provides
+    fun provideApprovedCheck(linkage: Linkage): DeletePrevention = DelayedDelete.approvedCheck(linkage)
+
+
+    @Provides
+    fun provideEventMultiplexer(): EventMultiplexerBuilder<FullComments, *, @JvmSuppressWildcards ReceiveChannel<FullComments>>{
+        return SimpleMultiplexer.SimpleMultiplexerBuilder<FullComments>().setIsolationStrategy(SingleFlowIsolation())
     }
+
+    @Provides
+    fun provideSpecificEventMultiplexer(): EventMultiplexerBuilder<FullComments, EventMultiplexer<FullComments>, @JvmSuppressWildcards ReceiveChannel<FullComments>>{
+        return provideEventMultiplexer()
+    }
+    @Provides
+    @com.google.inject.name.Named ("functions")
+    fun provideDDLFunctions() = with(DDL.Companion.Functions){listOf(
+            addParentIfNotExists,
+            commentIfNotExists,
+            commentWithMessage,
+            createCheck,
+            redditUsername
+    ).map { it(config) }}
+
+    @Provides
+    @com.google.inject.name.Named("tables")
+    fun provideDDLTable() = with(DDL.Companion.Tables) { listOf(
+            submissions,
+            check,
+            comments,
+            comments_caused,
+            commentsHierarchy,
+            unexScore,
+            top_posts,
+            relevantMessages
+    ).map { it(config) }}
+
 
     override fun configure() {
         if((options.get("useDB") as Boolean?) ?: true){
-            bind(typeLiteral<List<(Config) -> String>>()).annotatedWith(Names.named("ddlFunctions")).toInstance(
-                    with(DDL.Companion.Functions){listOf(
-                            addParentIfNotExists,
-                            commentIfNotExists,
-                            commentWithMessage,
-                            createCheck,
-                            redditUsername
-                    )})
             bind(Linkage::class.java).to(PostgresSQLinkage::class.java).`in`(Scopes.SINGLETON)
             bind(DDL::class.java)
         } else bind(Linkage::class.java).to(DummyLinkage::class.java)
@@ -95,6 +115,7 @@ class UnexFlowModule(private val options: Map<String, Any>): KotlinModule() {
         bind(RedditClient::class.java).toInstance(redditClient)
         bind(Config::class.java).toInstance(config)
 
+        bind(CommentsFetcherFactory::class.java).to(RedditCommentsFetchedFactory::class.java)
 
         bind(IsolationStrategy::class.java).to(SingleFlowIsolation::class.java)
 
@@ -114,11 +135,13 @@ class UnexFlowModule(private val options: Map<String, Any>): KotlinModule() {
 
         bind(Conversation::class.java).toProvider(DefferedConversationProvider::class.java)
 
+        bind(CommentsFetcherFactory::class.java).to(RedditCommentsFetchedFactory::class.java)
         //Dispatcher Stub
         bind(MarkAsReadFlow::class.java)
         bind(object : TypeLiteral<@kotlin.jvm.JvmSuppressWildcards ReceiveChannel<SubmissionReference>>() {})
                 .toInstance(newPostsOutput)
         bind(object : TypeLiteral<MonitorFactory<*, *>>() {}).to(DBCheckFactory::class.java)
+        bind(typeLiteral<MonitorFactory<IDBCheck, IDBCheckBuilder>>()).to(DBCheckFactory::class.java)
 
         bind(Long::class.java).annotatedWith(Names.named("delayToDeleteMillis")).toInstance(config[RedditSpec.scoring.timeUntilRemoval])
         bind(Long::class.java)

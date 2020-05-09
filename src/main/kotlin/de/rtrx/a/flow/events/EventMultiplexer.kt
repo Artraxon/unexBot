@@ -45,8 +45,10 @@ class SimpleMultiplexer<R: Any> @Inject constructor(private val origin: ReceiveC
             }
         }
     }
+
     override fun addListener(flow: Flow, fn: suspend (R) -> Unit) {
-        listeners.getOrDefault( flow, ConcurrentLinkedQueue() ).add(fn)
+        //No need to further synchronise it with the other parts since the Reddit API will be slower than our bot
+        listeners.getOrPut( flow, { ConcurrentLinkedQueue() }).add(fn)
     }
 
     override fun removeListeners(flow: Flow) {

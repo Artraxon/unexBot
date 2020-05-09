@@ -15,8 +15,8 @@ typealias DDLFunctions = List<(Config) -> String>
 class DDL @Inject constructor(
         private val config: Config,
         private val db: Linkage,
-        @param:Named("ddlFunctions") private val ddlFunctions: DDLFunctions,
-        private val DDLs: DDLFunctions
+        @param:Named("functions") private val ddlFunctions: @JvmSuppressWildcards List<String>,
+        @param:Named("tables") private val DDLs: @JvmSuppressWildcards List<String>
 ){
     private val logger = KotlinLogging.logger {  }
     fun init(createDDL: Boolean, createFunctions: Boolean){
@@ -24,7 +24,7 @@ class DDL @Inject constructor(
             logger.info("Creating the DDL")
             DDLs.forEach {
                 try {
-                    db.connection.prepareStatement(it(config)).execute()
+                    db.connection.prepareStatement(it).execute()
                 } catch (e: SQLException){
                     logger.error { "Something went wrong when creating table $it:\n${e.message}" }
                 }
@@ -35,7 +35,7 @@ class DDL @Inject constructor(
 
             ddlFunctions.forEach {
                 try {
-                    db.connection.prepareStatement(it(config)).execute()
+                    db.connection.prepareStatement(it).execute()
                 }catch (e: SQLException){
                     logger.error { "Something went wrong when creating function $it:\n${e.message}" }
                 }
