@@ -115,7 +115,7 @@ interface UnexFlowFactory : FlowFactory<UnexFlow, SubmissionReference>{
 class RedditUnexFlowFactory @Inject constructor(
         private val composingFn: MessageComposer,
         private val replyFn: Replyer,
-        private val monitorFactory: MonitorFactory<IDBCheck, IDBCheckBuilder>,
+        private val monitorFactory: Provider<IDBCheckBuilder>,
         private val linkage: Linkage,
         private val conversationFactory: Provider<Conversation>,
         private val delayedDeleteFactory: DelayedDeleteFactory,

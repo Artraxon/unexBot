@@ -140,8 +140,7 @@ class UnexFlowModule(private val options: Map<String, Any>): KotlinModule() {
         bind(MarkAsReadFlow::class.java)
         bind(object : TypeLiteral<@kotlin.jvm.JvmSuppressWildcards ReceiveChannel<SubmissionReference>>() {})
                 .toInstance(newPostsOutput)
-        bind(object : TypeLiteral<MonitorFactory<*, *>>() {}).to(DBCheckFactory::class.java)
-        bind(typeLiteral<MonitorFactory<IDBCheck, IDBCheckBuilder>>()).to(DBCheckFactory::class.java)
+        bind(IDBCheckBuilder::class.java).toProvider(DBCheckFactory::class.java)
 
         bind(Long::class.java).annotatedWith(Names.named("delayToDeleteMillis")).toInstance(config[RedditSpec.scoring.timeUntilRemoval])
         bind(Long::class.java)

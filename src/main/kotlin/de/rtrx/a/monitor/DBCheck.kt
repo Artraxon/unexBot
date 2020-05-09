@@ -11,6 +11,7 @@ import net.dean.jraw.RedditClient
 import net.dean.jraw.models.Comment
 import net.dean.jraw.references.SubmissionReference
 import javax.inject.Inject
+import javax.inject.Provider
 
 private val logger = KotlinLogging.logger {  }
 
@@ -95,7 +96,7 @@ class DBCheckFactory @Inject constructor(
         private val config: Config,
         private val linkage: Linkage,
         private val redditClient: RedditClient
-): MonitorFactory<IDBCheck, IDBCheckBuilder>{
+): Provider<IDBCheckBuilder> {
     override fun get(): IDBCheckBuilder {
         return DBCheckBuilder(config, linkage, redditClient)
     }

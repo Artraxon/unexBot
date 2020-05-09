@@ -9,8 +9,6 @@ interface Monitor{
     suspend fun start()
 }
 
-interface MonitorFactory <M: Monitor, B: MonitorBuilder<M>>: Provider<B>
-
 interface MonitorBuilder <M: Monitor>{
     fun build(submission: SubmissionReference): M
     fun setBotComment(comment: Comment?): MonitorBuilder<M>

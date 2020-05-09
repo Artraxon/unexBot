@@ -3,13 +3,13 @@ package de.rtrx.a.flow
 import de.rtrx.a.monitor.Check
 import de.rtrx.a.monitor.Monitor
 import de.rtrx.a.monitor.MonitorBuilder
-import de.rtrx.a.monitor.MonitorFactory
 import net.dean.jraw.models.Comment
 import net.dean.jraw.references.SubmissionReference
 import org.junit.jupiter.api.extension.ExtensionContext
 import org.junit.jupiter.params.provider.Arguments
 import org.junit.jupiter.params.provider.ArgumentsProvider
 import java.util.stream.Stream
+import javax.inject.Provider
 import kotlin.random.Random
 
 
@@ -37,6 +37,6 @@ class EmptyCheckBuilder: MonitorBuilder<EmptyCheck>  {
     override fun setBotComment(comment: Comment?): MonitorBuilder<EmptyCheck> { return this }
 }
 
-class EmptyCheckFactory : MonitorFactory<EmptyCheck, EmptyCheckBuilder> {
+class EmptyCheckFactory : Provider<EmptyCheckBuilder> {
     override fun get() = EmptyCheckBuilder()
 }
