@@ -12,7 +12,12 @@ private val logger = KotlinLogging.logger {  }
 @ExperimentalCoroutinesApi
 fun main(args: Array<String>) {
     val options = parseOptions(args)
-    val injector = Guice.createInjector(UnexFlowModule(options))
+    val configPath = options.get("configPath") as String? ?: ""
+    val useDB = options.get("useDB") as Boolean? ?: true
+    val injector = Guice.createInjector(
+            CoreModule(initConfig(configPath, RedditSpec, DBSpec), useDB),
+            UnexFlowModule())
+
     injector.getInstance(DDL::class.java).init(
             createDDL = (options.get("createDDL") as Boolean?) ?: true,
             createFunctions = (options.get("createDBFunctions") as Boolean?) ?: true

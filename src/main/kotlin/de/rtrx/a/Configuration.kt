@@ -11,8 +11,8 @@ import java.nio.file.StandardCopyOption
 import kotlin.system.exitProcess
 
 
-fun initConfig(path: String?): Config{
-    return Config { addSpec(RedditSpec); addSpec(DBSpec); addSpec(LoggingSpec)}
+fun initConfig(path: String?, vararg specs: ConfigSpec): Config{
+    return Config { specs.forEach(::addSpec) }
             //Adding the config Sources
             .from.yaml.resource("config.yml")
             .run {
@@ -92,9 +92,6 @@ object DBSpec: ConfigSpec("DB"){
     val password by required<String>()
     val address by required<String>()
     val db by required<String>()
-}
-object LoggingSpec: ConfigSpec("Logging") {
-    val logLevel by required<String>()
 }
 
 private val verifyBoolean = { it: String -> if(it == "true" || it == "false") true else false}

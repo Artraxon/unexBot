@@ -37,28 +37,7 @@ import javax.inject.Named
 import javax.inject.Provider
 import kotlin.reflect.KClass
 
-class UnexFlowModule(private val options: Map<String, Any>): KotlinModule() {
-    val config: Config
-    val redditClient: RedditClient
-    val newPostEvent: NewPostReferenceEvent
-    val newPostsOutput: ReceiveChannel<SubmissionReference>
-
-    val incomingMessageFactory: IncomingMessageFactory
-    val sentMessageFactory: SentMessageFactory
-
-    init {
-        config = initConfig(options.get("configPath") as String?)
-        redditClient = initReddit(config)
-
-        val (newPosts, outChannel) =
-                runBlocking { RedditNewPostReferenceFactory(config, redditClient).create(config[RedditSpec.subreddit]) }
-
-        this.newPostEvent = newPosts
-        newPostsOutput = outChannel
-
-        incomingMessageFactory = RedditIncomingMessageFactory(config, redditClient)
-        sentMessageFactory = RedditSentMessageFactory(config, redditClient)
-    }
+class UnexFlowModule(): KotlinModule() {
 
     @Provides
     fun provideDispatcherStub(
@@ -70,21 +49,8 @@ class UnexFlowModule(private val options: Map<String, Any>): KotlinModule() {
             mapOf( ManuallyFetchedEvent::class to (manuallyFetchedFactory to SubmissionReference::class) ) as EventFactories )
 
     @Provides
-    fun provideApprovedCheck(linkage: Linkage): DeletePrevention = DelayedDelete.approvedCheck(linkage)
-
-
-    @Provides
-    fun provideEventMultiplexer(): EventMultiplexerBuilder<FullComments, *, @JvmSuppressWildcards ReceiveChannel<FullComments>>{
-        return SimpleMultiplexer.SimpleMultiplexerBuilder<FullComments>().setIsolationStrategy(SingleFlowIsolation())
-    }
-
-    @Provides
-    fun provideSpecificEventMultiplexer(): EventMultiplexerBuilder<FullComments, EventMultiplexer<FullComments>, @JvmSuppressWildcards ReceiveChannel<FullComments>>{
-        return provideEventMultiplexer()
-    }
-    @Provides
     @com.google.inject.name.Named ("functions")
-    fun provideDDLFunctions() = with(DDL.Companion.Functions){listOf(
+    fun provideDDLFunctions(config: Config) = with(DDL.Companion.Functions){listOf(
             addParentIfNotExists,
             commentIfNotExists,
             commentWithMessage,
@@ -94,7 +60,7 @@ class UnexFlowModule(private val options: Map<String, Any>): KotlinModule() {
 
     @Provides
     @com.google.inject.name.Named("tables")
-    fun provideDDLTable() = with(DDL.Companion.Tables) { listOf(
+    fun provideDDLTable(config: Config) = with(DDL.Companion.Tables) { listOf(
             submissions,
             check,
             comments,
@@ -107,112 +73,11 @@ class UnexFlowModule(private val options: Map<String, Any>): KotlinModule() {
 
 
     override fun configure() {
-        if((options.get("useDB") as Boolean?) ?: true){
-            bind(Linkage::class.java).to(PostgresSQLinkage::class.java).`in`(Scopes.SINGLETON)
-            bind(DDL::class.java)
-        } else bind(Linkage::class.java).to(DummyLinkage::class.java)
-
-        bind(RedditClient::class.java).toInstance(redditClient)
-        bind(Config::class.java).toInstance(config)
-
-        bind(CommentsFetcherFactory::class.java).to(RedditCommentsFetchedFactory::class.java)
-
-        bind(IsolationStrategy::class.java).to(SingleFlowIsolation::class.java)
-
-        bind(IncomingMessageFactory::class.java).toInstance(incomingMessageFactory)
-        bind(SentMessageFactory::class.java).toInstance(sentMessageFactory)
-        bind(typeLiteral<@kotlin.jvm.JvmSuppressWildcards EventMultiplexerBuilder<Message, @kotlin.jvm.JvmSuppressWildcards EventMultiplexer<Message>, @kotlin.jvm.JvmSuppressWildcards ReceiveChannel<Message>>>())
-                .toProvider(object : Provider<@kotlin.jvm.JvmSuppressWildcards EventMultiplexerBuilder<Message, @kotlin.jvm.JvmSuppressWildcards EventMultiplexer<Message>, @kotlin.jvm.JvmSuppressWildcards ReceiveChannel<Message>>>{
-                    override fun get() = SimpleMultiplexer.SimpleMultiplexerBuilder<Message>()
-                })
-        //bind(object :TypeLiteral<EventMultiplexerBuilder<Message, @JvmSuppressWildcards EventMultiplexer<Message>, @JvmSuppressWildcards ReceiveChannel< @JvmSuppressWildcards Message>>>(){})
-                //.annotatedWith(Names.named("incoming"))
-        //bind(typeLiteral<EventMultiplexerBuilder<Message, EventMultiplexer<Message>, ReceiveChannel<Message>>>())
-        //bind(object : TypeLiteral<EventMultiplexerBuilder<Message, @JvmSuppressWildcards EventMultiplexer<Message>, @JvmSuppressWildcards ReceiveChannel<@JvmSuppressWildcards Message>>>() {})
-                //.annotatedWith(Names.named("sent"))
-                //.to(SimpleMultiplexer.SimpleMultiplexerBuilder::class.java)
-
-
-        bind(Conversation::class.java).toProvider(DefferedConversationProvider::class.java)
-
-        bind(CommentsFetcherFactory::class.java).to(RedditCommentsFetchedFactory::class.java)
-        //Dispatcher Stub
-        bind(MarkAsReadFlow::class.java)
-        bind(object : TypeLiteral<@kotlin.jvm.JvmSuppressWildcards ReceiveChannel<SubmissionReference>>() {})
-                .toInstance(newPostsOutput)
-        bind(IDBCheckBuilder::class.java).toProvider(DBCheckFactory::class.java)
-
-        bind(Long::class.java).annotatedWith(Names.named("delayToDeleteMillis")).toInstance(config[RedditSpec.scoring.timeUntilRemoval])
-        bind(Long::class.java)
-                .annotatedWith(Names.named("delayToFinishMillis"))
-                .toInstance(config[RedditSpec.messages.sent.timeSaved] - config[RedditSpec.scoring.timeUntilRemoval])
-
-        install(FactoryModuleBuilder()
-                .implement(DelayedDelete::class.java, RedditDelayedDelete::class.java)
-                .build(DelayedDeleteFactory::class.java))
-
-        //bind(DelayedDeleteFactory::class.java).to(RedditDelayedDeleteFactory::class.java)
         bind(UnexFlowFactory::class.java).to(RedditUnexFlowFactory::class.java)
         bind(CoroutineScope::class.java).annotatedWith(Names.named("launcherScope"))
                 .toInstance(CoroutineScope(Dispatchers.Default))
-
-        bind(MessageComposer::class.java).to(RedditMessageComposer::class.java)
-        bind(Replyer::class.java).to(RedditReplyer::class.java)
-        bind(Unignorer::class.java).to(RedditUnignorer::class.java)
-        bind(MonitorBuilder::class.java).to(DBCheckBuilder::class.java)
         bind(UnexFlowDispatcher::class.java)
     }
 
-    fun bindDDL(){
-        bind(typeLiteral<List<(Config) -> String>>()).annotatedWith(Names.named("ddlFunctions")).toInstance(
-                with(DDL.Companion.Functions){listOf(
-                        addParentIfNotExists,
-                        commentIfNotExists,
-                        commentWithMessage,
-                        createCheck,
-                        redditUsername
-                )})
-        bind(typeLiteral<List<(Config) -> String>>()).annotatedWith(Names.named("ddlFunctions")).toInstance(
-                with(DDL.Companion.Tables) {
-                    listOf(
-                            submissions,
-                            relevantMessages,
-                            comments,
-                            comments_caused,
-                            commentsHierarchy,
-                            check,
-                            top_posts,
-                            unexScore
-                    )
-                }
-        )
-    }
 
-
-    fun initReddit(config: Config): RedditClient {
-        println(  config[RedditSpec.credentials.username])
-        println( config[RedditSpec.credentials.password])
-        println( config[RedditSpec.credentials.clientID])
-        println(config[RedditSpec.credentials.clientSecret])
-
-        val oauthCreds = Credentials.script(
-                config[RedditSpec.credentials.username],
-                config[RedditSpec.credentials.password],
-                config[RedditSpec.credentials.clientID],
-                config[RedditSpec.credentials.clientSecret]
-        )
-
-        val userAgent = UserAgent("linux", config[RedditSpec.credentials.appID], "0.9", config[RedditSpec.credentials.operatorUsername])
-
-
-        val reddit = try {
-            OAuthHelper.automatic(OkHttpNetworkAdapter(userAgent), oauthCreds)
-        } catch (e: Throwable){
-            KotlinLogging.logger {  }.error { "An exception was raised while trying to authenticate. Are your credentials correct?" }
-            System.exit(1)
-            throw Exception()
-        }
-        reddit.logHttp = false
-        return reddit
-    }
 }
