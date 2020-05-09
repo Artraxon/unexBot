@@ -18,7 +18,9 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import javax.inject.Inject
 
-data class FullComments(public val comments: List<Comment>, public val commentsHierarchy: Map<String, String>, public val sticky: Comment?)
+data class FullComments(public val comments: List<Comment>, public val commentsHierarchy: Map<String, String>, public val sticky: Comment?) {
+    public val commentsToSticky by lazy { sticky?.run { commentsHierarchy.count { it.value == id } } ?: 0 }
+}
 
 interface CommentsFetchedEvent: EventType<FullComments>
 interface ManuallyFetchedEvent: CommentsFetchedEvent {
