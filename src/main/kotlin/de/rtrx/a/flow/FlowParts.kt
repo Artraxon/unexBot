@@ -216,15 +216,16 @@ class RedditDelayedDelete @AssistedInject constructor(
         @param:Assisted private val scope: CoroutineScope
 ): DelayedDelete {
     val removeSubmission = remove()
-    lateinit var deletionJob: Job
+    lateinit var deletionJob: Deferred<DelayedDelete.DeleteResult>
 
     override fun start() {
-        deletionJob = scope.launch {
+        deletionJob = scope.async {
             try {
                 delay(delayToDeleteMillis)
                 removeSubmission.start()
                 delay(delayToFinishMillis)
-            } catch (e: CancellationException) { }
+                removeSubmission.await()
+            } catch (e: CancellationException) { DelayedDelete.DeleteResult.NotDeleted()}
         }
     }
 
@@ -246,15 +247,15 @@ class RedditDelayedDelete @AssistedInject constructor(
                 } else { removalCheck = DelayedDelete.DeleteResult.NotDeleted() }
                 removalCheck
             }
-            deletionJob.onJoin {
+            deletionJob.onAwait {
                 logger.trace("Didn't receive an answer for ${publicContribution.fullName}")
-                DelayedDelete.DeleteResult.WasDeleted()
+                it
             }
         }
     }
 
     private fun remove(): Deferred<DelayedDelete.DeleteResult> {
-        return scope.async (start = CoroutineStart.LAZY) {
+        return scope.async<DelayedDelete.DeleteResult> (start = CoroutineStart.LAZY) {
             val willRemove = preventsDeletion.check(publicContribution)
             if(!willRemove.bool) {
                 publicContribution.remove()
