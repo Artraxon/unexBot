@@ -1,32 +1,19 @@
 package de.rtrx.a.unex
 
-import com.google.inject.name.Named
-import de.rtrx.a.flow.Flow
-import de.rtrx.a.flow.FlowDispatcherInterface
 import de.rtrx.a.flow.IFlowDispatcherStub
 import de.rtrx.a.flow.IsolationStrategy
 import de.rtrx.a.flow.events.*
-import de.rtrx.a.flow.events.comments.CommentsFetcherFactory
-import de.rtrx.a.flow.events.comments.FullComments
-import de.rtrx.a.flow.events.comments.ManuallyFetchedEvent
-import de.rtrx.a.flow.events.comments.RedditCommentsFetchedFactory
-import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.ReceiveChannel
+import kotlinx.coroutines.runBlocking
 import mu.KotlinLogging
 import net.dean.jraw.models.Message
-import net.dean.jraw.references.SubmissionReference
-import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.Executors
 import javax.inject.Inject
-import javax.inject.Provider
 
 
 class UnexFlowDispatcher @Inject constructor(
         private val stub: IFlowDispatcherStub<UnexFlow, UnexFlowFactory>,
         incomingMessageMultiplexerBuilder: @JvmSuppressWildcards EventMultiplexerBuilder<Message, @JvmSuppressWildcards EventMultiplexer<Message>, @JvmSuppressWildcards ReceiveChannel<Message>>,
         sentMessageMultiplexerBuilder: @JvmSuppressWildcards EventMultiplexerBuilder<Message, @JvmSuppressWildcards EventMultiplexer<Message>, @JvmSuppressWildcards ReceiveChannel<Message>>,
-        private val commentsFetcherMultiplexerProvider: @JvmSuppressWildcards Provider<@JvmSuppressWildcards EventMultiplexerBuilder<FullComments, @JvmSuppressWildcards EventMultiplexer<FullComments>, @JvmSuppressWildcards ReceiveChannel<FullComments>>>,
-        private val commentsFetcherIsolationStrategyProvider: Provider<IsolationStrategy>,
         incomingMessageFactory: IncomingMessageFactory,
         sentMessageFactory: SentMessageFactory,
         isolationStrategy: IsolationStrategy,

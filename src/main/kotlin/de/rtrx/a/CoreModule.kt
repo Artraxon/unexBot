@@ -57,8 +57,6 @@ class CoreModule(private val config: Config, private val useDB: Boolean) : Kotli
         sentMessageFactory = RedditSentMessageFactory(config, redditClient)
     }
 
-    @Provides
-    fun provideApprovedCheck(linkage: Linkage): DeletePrevention = DelayedDelete.approvedCheck(linkage)
 
 
     @Provides
