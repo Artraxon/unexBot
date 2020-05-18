@@ -94,7 +94,7 @@ class DDL @Inject constructor(
             end if;
             INSERT INTO top_posts VALUES (${'$'}1, ${'$'}2, top_posts_id[i], top_posts_score[i]);
           end loop;
-          END;
+          END
        $$;
         """.trimIndent().toSupplier()
 
@@ -112,7 +112,7 @@ class DDL @Inject constructor(
                 ON CONFLICT DO NOTHING 
                 RETURNING TRUE INTO result;
             RETURN result;
-        end;
+        end
         $$;
 
     """.trimIndent().toSupplier()
