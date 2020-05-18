@@ -33,8 +33,9 @@ import net.dean.jraw.oauth.OAuthHelper
 import net.dean.jraw.references.SubmissionReference
 import java.lang.Exception
 import javax.inject.Provider
+import kotlin.reflect.KClass
 
-class CoreModule(private val config: Config, private val useDB: Boolean) : KotlinModule() {
+class CoreModule(private val config: Config, private val useDB: Boolean, private val linkageClazz: KClass<out Linkage>) : KotlinModule() {
     private val logger = KotlinLogging.logger {  }
     val redditClient: RedditClient
 
@@ -74,7 +75,7 @@ class CoreModule(private val config: Config, private val useDB: Boolean) : Kotli
         bind(Config::class.java).toInstance(config)
 
         if(useDB){
-            bind(Linkage::class.java).to(PostgresSQLinkage::class.java).`in`(Scopes.SINGLETON)
+            bind(Linkage::class.java).to(linkageClazz.java).`in`(Scopes.SINGLETON)
             bind(DDL::class.java)
         } else bind(Linkage::class.java).to(DummyLinkage::class.java)
 

@@ -2,6 +2,7 @@ package de.rtrx.a
 
 import com.google.inject.Guice
 import de.rtrx.a.database.DDL
+import de.rtrx.a.database.PostgresSQLinkage
 import de.rtrx.a.unex.UnexFlowModule
 import de.rtrx.a.unex.UnexFlowDispatcher
 import kotlinx.coroutines.*
@@ -15,7 +16,7 @@ fun main(args: Array<String>) {
     val configPath = options.get("configPath") as String? ?: ""
     val useDB = options.get("useDB") as Boolean? ?: true
     val injector = Guice.createInjector(
-            CoreModule(initConfig(configPath, RedditSpec, DBSpec), useDB),
+            CoreModule(initConfig(configPath, RedditSpec, DBSpec), useDB, PostgresSQLinkage::class),
             UnexFlowModule())
 
     injector.getInstance(DDL::class.java).init(
