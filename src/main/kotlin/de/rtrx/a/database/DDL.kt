@@ -85,14 +85,14 @@ class DDL @Inject constructor(
         as $$
         DECLARE
         BEGIN
-          INSERT INTO public."check" VALUES (${'$'}1, ${'$'}2, ${'$'}3, ${'$'}4, ${'$'}5, ${'$'}6, ${'$'}7, ${'$'}8, ${'$'}9);
-          INSERT INTO public.unex_score VALUES (${'$'}1, ${'$'}2, ${'$'}10);
+          INSERT INTO "check" VALUES (${'$'}1, ${'$'}2, ${'$'}3, ${'$'}4, ${'$'}5, ${'$'}6, ${'$'}7, ${'$'}8, ${'$'}9);
+          INSERT INTO unex_score VALUES (${'$'}1, ${'$'}2, ${'$'}10);
           FOR i in 1.. array_upper(top_posts_id, 1)
           LOOP
             IF top_posts_id[i] IS NULL THEN
               EXIT;
             end if;
-            INSERT INTO public.top_posts VALUES (${'$'}1, ${'$'}2, top_posts_id[i], top_posts_score[i]);
+            INSERT INTO top_posts VALUES (${'$'}1, ${'$'}2, top_posts_id[i], top_posts_score[i]);
           end loop;
           END;
        $$;
