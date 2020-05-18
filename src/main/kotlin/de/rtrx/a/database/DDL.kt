@@ -51,14 +51,15 @@ class DDL @Inject constructor(
         language plpgsql
         as $$
         DECLARE
+            result boolean;
         BEGIN
-            IF NOT EXISTS(SELECT * FROM comments WHERE comments.id = comment_id) THEN
-              INSERT INTO comments VALUES(comment_id, body, created, author);
-              RETURN true;
-            end if;
-            RETURN false;
+            result = false;
+            INSERT INTO comments VALUES(comment_id, body, created, author)
+                ON CONFLICT DO NOTHING
+                RETURNING TRUE INTO result;
+            RETURN result;
         end;
-        $$;
+            $$;
         """.trimIndent().toSupplier()
 
             @Language("PostgreSQL")
@@ -99,19 +100,20 @@ class DDL @Inject constructor(
 
             @Language("PostgreSQL")
             val addParentIfNotExists = """
-        create function comment_if_not_exists(comment_id text, body text, created timestamp with time zone, author text) returns boolean
+        create function add_parent_if_not_exists(c_id text, p_id text) returns boolean
             language plpgsql
         as
-        ${'$'}${'$'}
+        $$
         DECLARE
+            result boolean;
         BEGIN
-            IF NOT EXISTS(SELECT * FROM comments WHERE comments.id = comment_id) THEN
-              INSERT INTO comments VALUES(comment_id, body, created, author);
-              RETURN true;
-            end if;
-            RETURN false;
+            result = false;
+            INSERT INTO comments_hierarchy VALUES(c_id, p_id)
+                ON CONFLICT DO NOTHING 
+                RETURNING TRUE INTO result;
+            RETURN result;
         end;
-        ${'$'}${'$'};
+        $$;
 
     """.trimIndent().toSupplier()
 
