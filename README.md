@@ -4,7 +4,7 @@ A small bot for Reddit that filters out (some) of the rubbish and collects data 
 
 ## What does this bot do?
 
-1. When a post is submitted to a subreddit, the user is messaged asking him to answer back with a sum-up of his content.
+1. When a post is submitted to a subreddit, the user is messaged asking them to answer back with a sum-up of their content.
 2. Does the user answer quickly?
     1. If the user answers within a small time frame, then the post stays up and the reply is posted in a stickied comment below the post.
     2. If the user doesn't answer within this time frame, then the post is removed. The user has another window of time to reply and restore the post. Replying after this time window is passed will do ... nothing.
