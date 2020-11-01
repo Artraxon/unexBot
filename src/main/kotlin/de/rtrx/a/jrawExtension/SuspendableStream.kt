@@ -86,11 +86,12 @@ class SuspendableStream<out T> @JvmOverloads constructor(
 fun <T> Paginator<T>.subscribe(
     waitIntervall: Long,
     coroutineScope: CoroutineScope = CoroutineScope(Dispatchers.Default),
-    ageLimit: Long = 1000 * 60 * 60 * 4
+    ageLimit: Long = 1000 * 60 * 60 * 4,
+    channelStart: CoroutineStart = CoroutineStart.DEFAULT
 ): Pair<Job, ReceiveChannel<T>> where T: UniquelyIdentifiable, T: Created  {
     val logger = KotlinLogging.logger {  }
     val channel = Channel<T>(capacity = Channel.UNLIMITED)
-    val job =  coroutineScope.launch {
+    val job =  coroutineScope.launch(start = channelStart){
         while(isActive) {
             try {
                 val stream = SuspendableStream(this@subscribe, ConstantBackoffStrategy(waitIntervall), ageLimit = ageLimit)
