@@ -1,8 +1,8 @@
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
-project.version = "2.2.11"
+project.version = "2.2.18"
 plugins {
-    id("org.jetbrains.kotlin.jvm") version "1.3.41"
+    id("org.jetbrains.kotlin.jvm") version "1.4.0"
 
     application
     id("com.github.johnrengelman.shadow") version("5.1.0")
@@ -24,7 +24,9 @@ dependencies {
 
     implementation("dev.misfitlabs.kotlinguice4:kotlin-guice:1.4.1")
     implementation(kotlin("stdlib"))
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.3.0")
+    implementation("org.jetbrains.kotlin:kotlin-reflect:1.4.10")
+
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.3.9")
     implementation( "net.dean.jraw:JRAW:1.1.0")
     implementation( "org.postgresql:postgresql:42.2.8")
     implementation( "com.google.code.gson:gson:2.8.5")
@@ -46,7 +48,6 @@ dependencies {
 
 application {
     mainClassName = "de.rtrx.a.MainKt"
-    applicationDefaultJvmArgs = listOf("--add-opens", "java.base/java.lang=ALL-UNNAMED")
 }
 java {
     sourceCompatibility = JavaVersion.VERSION_1_8
@@ -104,4 +105,12 @@ publishing {
             from(components["kotlin"])
         }
     }
+}
+val compileKotlin: KotlinCompile by tasks
+compileKotlin.kotlinOptions {
+    jvmTarget = "1.8"
+}
+val compileTestKotlin: KotlinCompile by tasks
+compileTestKotlin.kotlinOptions {
+    jvmTarget = "1.8"
 }
