@@ -11,6 +11,8 @@ import org.junit.jupiter.params.provider.ArgumentsProvider
 import java.util.stream.Stream
 import javax.inject.Provider
 import kotlin.random.Random
+import kotlin.reflect.full.declaredMembers
+import kotlin.reflect.jvm.isAccessible
 
 
 fun concatStringFromRandom(seed: Int, count: Int): String{
@@ -39,4 +41,11 @@ class EmptyCheckBuilder: MonitorBuilder<EmptyCheck>  {
 
 class EmptyCheckFactory : Provider<EmptyCheckBuilder> {
     override fun get() = EmptyCheckBuilder()
+}
+
+fun <R> Collection<R>.eachAndAll(vararg predicates: (R) -> Boolean): Boolean{
+    return this.all { element -> predicates.any { it(element) } } && predicates.all { this.any(it) }
+}
+inline fun <reified R, reified S> accessPrivateProperty(instance: R, methodName: String): S {
+    return R::class.members.find { it.name == methodName }!!.apply { isAccessible = true }.call(instance) as S
 }

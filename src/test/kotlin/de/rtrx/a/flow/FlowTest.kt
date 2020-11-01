@@ -135,12 +135,13 @@ class StringFlow(
         val failAt: Int,
         val successAt: Int,
         private val stub: FlowStub<String, StringFlow>
-) : IFlowStub<String> by stub, Flow {
+) : IFlowStub<String, StringFlow> by stub, Flow {
     var string = initValue
     override suspend fun start() {
         stub.setOuter(this)
         subscribe(this::concat, eventSource)
     }
+
 
     suspend fun concat(str: String){
         if(string.length < failAt && string.length < successAt) string += str;
