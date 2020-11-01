@@ -87,7 +87,7 @@ class DDL @Inject constructor(
         BEGIN
           INSERT INTO "check" VALUES (${'$'}1, ${'$'}2, ${'$'}3, ${'$'}4, ${'$'}5, ${'$'}6, ${'$'}7, ${'$'}8, ${'$'}9);
           INSERT INTO unex_score VALUES (${'$'}1, ${'$'}2, ${'$'}10);
-          FOR i in 1.. array_upper(top_posts_id, 1)
+          FOR i in 1.. coalesce(array_upper(top_posts_id, 1), 0)
           LOOP
             IF top_posts_id[i] IS NULL THEN
               EXIT;

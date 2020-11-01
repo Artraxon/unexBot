@@ -1,26 +1,20 @@
 package de.rtrx.a
 
 import com.google.inject.Provides
-import com.google.inject.Scopes
 import com.google.inject.TypeLiteral
-import com.google.inject.assistedinject.FactoryModuleBuilder
 import com.google.inject.name.Names
 import com.uchuhimo.konf.Config
 import de.rtrx.a.database.DDL
-import de.rtrx.a.database.DummyLinkage
-import de.rtrx.a.database.Linkage
-import de.rtrx.a.database.PostgresSQLinkage
 import de.rtrx.a.flow.*
 import de.rtrx.a.flow.events.*
 import de.rtrx.a.flow.events.comments.CommentsFetcherFactory
 import de.rtrx.a.flow.events.comments.FullComments
 import de.rtrx.a.flow.events.comments.RedditCommentsFetchedFactory
-import de.rtrx.a.monitor.DBCheckBuilder
 import de.rtrx.a.monitor.DBCheckFactory
 import de.rtrx.a.monitor.IDBCheckBuilder
-import de.rtrx.a.monitor.MonitorBuilder
 import dev.misfitlabs.kotlinguice4.KotlinModule
 import dev.misfitlabs.kotlinguice4.typeLiteral
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.channels.ReceiveChannel
 import kotlinx.coroutines.runBlocking
 import mu.KotlinLogging
@@ -33,9 +27,8 @@ import net.dean.jraw.oauth.OAuthHelper
 import net.dean.jraw.references.SubmissionReference
 import java.lang.Exception
 import javax.inject.Provider
-import kotlin.reflect.KClass
 
-class CoreModule(private val config: Config, private val useDB: Boolean, private val linkageClazz: KClass<out Linkage>) : KotlinModule() {
+class CoreModule(private val config: Config, private val useDB: Boolean) : KotlinModule() {
     private val logger = KotlinLogging.logger {  }
     val redditClient: RedditClient
 
@@ -54,8 +47,8 @@ class CoreModule(private val config: Config, private val useDB: Boolean, private
         this.newPostEvent = newPosts
         newPostsOutput = outChannel
 
-        incomingMessageFactory = RedditIncomingMessageFactory(config, redditClient)
-        sentMessageFactory = RedditSentMessageFactory(config, redditClient)
+        incomingMessageFactory = RedditIncomingMessageFactory(config, redditClient, CoroutineStart.LAZY)
+        sentMessageFactory = RedditSentMessageFactory(config, redditClient, CoroutineStart.LAZY)
     }
 
 
@@ -74,10 +67,7 @@ class CoreModule(private val config: Config, private val useDB: Boolean, private
         bind(RedditClient::class.java).toInstance(redditClient)
         bind(Config::class.java).toInstance(config)
 
-        if(useDB){
-            bind(Linkage::class.java).to(linkageClazz.java).`in`(Scopes.SINGLETON)
-            bind(DDL::class.java)
-        } else bind(Linkage::class.java).to(DummyLinkage::class.java)
+        if(useDB) bind(DDL::class.java)
 
         bindConfigValues()
         bind(IsolationStrategy::class.java).to(SingleFlowIsolation::class.java)
@@ -93,24 +83,22 @@ class CoreModule(private val config: Config, private val useDB: Boolean, private
         bind(object : TypeLiteral<@kotlin.jvm.JvmSuppressWildcards ReceiveChannel<SubmissionReference>>() {})
                 .toInstance(newPostsOutput)
 
-        install(FactoryModuleBuilder()
-                .implement(DelayedDelete::class.java, RedditDelayedDelete::class.java)
-                .build(DelayedDeleteFactory::class.java))
 
         bind(MarkAsReadFlow::class.java)
 
-        bind(Conversation::class.java).toProvider(DefferedConversationProvider::class.java)
+        bind(object : TypeLiteral<JumpstartConversation<String>>() {}).toProvider(DefferedConversationProvider::class.java)
         bind(IDBCheckBuilder::class.java).toProvider(DBCheckFactory::class.java)
         bind(MessageComposer::class.java).to(RedditMessageComposer::class.java)
         bind(Replyer::class.java).to(RedditReplyer::class.java)
         bind(Unignorer::class.java).to(RedditUnignorer::class.java)
+
     }
 
     fun bindConfigValues() {
         bind(Long::class.java).annotatedWith(Names.named("delayToDeleteMillis")).toInstance(config[RedditSpec.scoring.timeUntilRemoval])
         bind(Long::class.java)
                 .annotatedWith(Names.named("delayToFinishMillis"))
-                .toInstance(config[RedditSpec.messages.sent.timeSaved] - config[RedditSpec.scoring.timeUntilRemoval])
+                .toInstance(config[RedditSpec.messages.sent.maxTimeDistance] - config[RedditSpec.scoring.timeUntilRemoval])
     }
     fun initReddit(): RedditClient {
 

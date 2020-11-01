@@ -1,8 +1,8 @@
 package de.rtrx.a.flow
 
 import de.rtrx.a.flow.events.EventType
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.*
+import javax.inject.Provider
 import kotlin.coroutines.CoroutineContext
 
 /**
@@ -10,6 +10,14 @@ import kotlin.coroutines.CoroutineContext
  */
 interface Flow : CoroutineScope{
     suspend fun start()
+
+    fun startInScope(startFn: suspend () -> Unit): Job {
+        return launch { startFn() }
+    }
+}
+
+interface RelaunchableFlow : Flow {
+    suspend fun relaunch()
 }
 
 /**
@@ -49,8 +57,8 @@ interface FlowBuilder<T: Flow,M: Any> {
     fun build(): T
 }
 
-abstract class FlowBuilderDSL <T, M: Any > : FlowBuilder<T, M>
-        where T: IFlowStub<M>,
+abstract class FlowBuilderDSL <T, M: Any> : FlowBuilder<T, M>
+        where T: IFlowStub<M, T>,
               T : Flow{
     protected var _initValue: M? = null
     protected var _callback: Callback<in FlowResult<T>, Unit> = Callback {_ -> Unit}
@@ -91,33 +99,64 @@ abstract class FlowBuilderDSL <T, M: Any > : FlowBuilder<T, M>
 }
 
 interface FlowFactory<T: Flow, M: Any>{
-    suspend fun create(dispatcher: FlowDispatcherInterface<T>, initValue: M, callback: Callback<FlowResult<T>, Unit>): T
+    suspend fun create(dispatcher: FlowDispatcherInterface<T>, initValue: M, callback: Callback<in FlowResult<T>, Unit>): T
+}
+
+interface RelaunchableFlowFactory<T: RelaunchableFlow, M: Any, D: Any?>: FlowFactory<T, M> {
+    suspend fun recreateFlows(dispatcher: FlowDispatcherInterface<T>, callbackProvider: Provider<Callback<in FlowResult<T>, Unit>>, additionalData: D): Collection<T>
 }
 
 
 /**
  * @param M The type of the initial value
  */
-interface IFlowStub<M> {
+interface IFlowStub<M, C: IFlowStub<M, C>> {
     val initValue: M
     val coroutineContext: CoroutineContext
 
+    fun setOuter(outer: C)
+
+    @Deprecated("use withSubscription")
     suspend fun <R: Any> subscribe(function: suspend (R) -> Unit, type: EventType<R>)
+    @Deprecated("use withSubscription")
     suspend fun <R: Any> unsubscribe(type: EventType<R>)
+
+
+    suspend fun <R : Any, T> withSubscription(subscription: Subscription<R>, block: suspend CoroutineScope.() -> T): T
+    suspend fun <T> withSubscriptions(subscriptions: Collection<Subscription<*>>, block: suspend CoroutineScope.() -> T): T
 }
+
+/**
+ * Typesafe Representation of a subscription
+ */
+interface Subscription <R: Any> {
+    val hook: suspend (R) -> Unit
+    val type: EventType<R>
+    companion object {
+        private class SubscriptionImplementation<R: Any>(
+                override val hook: suspend (R) -> Unit,
+                override val type: EventType<R>
+        ): Subscription<R>
+
+        fun <R: Any> create(hook: suspend (R) -> Unit, type: EventType<R>): Subscription<R> = SubscriptionImplementation(hook, type)
+    }
+}
+
+
+
 
 /**
  * @param M the type of the initial Value being supplied
  */
-class FlowStub <M, C: IFlowStub<M>> (
+class FlowStub <M, C: IFlowStub<M, C>> (
         override val initValue: M,
         private val _subscribeAccess: suspend (C, suspend (Any) -> Unit, EventType<*>) -> Unit,
         private val _unsubscribeAccess: suspend (C, EventType<*>) -> Unit,
         private val scope: CoroutineScope)
-    : IFlowStub<M> {
+    : IFlowStub<M, C> {
     private var outer: C? = null
 
-    fun setOuter(outer: C) = if(this.outer == null) this.outer = outer else Unit
+    override fun setOuter(outer: C) = if(this.outer == null) this.outer = outer else Unit
 
     override suspend fun <R: Any> subscribe(function: suspend (R) -> Unit, type: EventType<R>) {
         _subscribeAccess(outer!!, { event: Any -> function(event as R) } , type)
@@ -129,6 +168,24 @@ class FlowStub <M, C: IFlowStub<M>> (
 
     override val coroutineContext: CoroutineContext
         get() = scope.coroutineContext
+
+    override suspend fun <R: Any, T> withSubscription(subscription: Subscription<R>, block: suspend CoroutineScope.() -> T): T{
+        _subscribeAccess(outer!!, { event: Any -> subscription.hook(event as R) }, subscription.type)
+        //Wrappers are needed (according to Intellij) to make sure the receiver is unambiguous
+        val result = block(scope)
+        _unsubscribeAccess(outer!!, subscription.type)
+        return result
+    }
+
+    override suspend fun <T> withSubscriptions(subscriptions: Collection<Subscription<*>>, block: suspend CoroutineScope.() -> T): T {
+        subscriptions.forEach { subscription -> with(subscription.hook as suspend (Any) -> Unit) {
+            _subscribeAccess(outer!!, {event: Any -> this(event) }, subscription.type) }
+        }
+
+        val result = block(scope)
+        subscriptions.forEach { subscription ->  _unsubscribeAccess(outer!!, subscription.type)}
+        return result
+    }
 }
 
 sealed class FlowResult <T: Flow> (val finishedFlow: T){

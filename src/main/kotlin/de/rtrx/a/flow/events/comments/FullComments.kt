@@ -4,6 +4,7 @@ import com.uchuhimo.konf.Config
 import de.rtrx.a.RedditSpec
 import de.rtrx.a.flow.events.EventType
 import de.rtrx.a.flow.events.EventTypeFactory
+import de.rtrx.a.jrawExtension.UpdatedCommentNode
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.ReceiveChannel
@@ -12,9 +13,9 @@ import net.dean.jraw.models.Comment
 import net.dean.jraw.models.CommentSort
 import net.dean.jraw.references.CommentsRequest
 import net.dean.jraw.references.SubmissionReference
+import net.dean.jraw.tree.AbstractCommentNode
 import net.dean.jraw.tree.ReplyCommentNode
 import java.util.*
-import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import javax.inject.Inject
 
@@ -54,26 +55,28 @@ class RedditCommentsFetchedFactory @Inject constructor(
         override suspend fun fetchComments() {
             CoroutineScope(context).launch {
                 //Forms the Request for looking up the comments
-                val commentsTree = submission.comments(CommentsRequest(
+                val firstPull = submission.comments(CommentsRequest(
                         depth = config[RedditSpec.checks.DB.depth],
                         sort = CommentSort.TOP
-                )).apply {
-                    var size = totalSize()
-                    //Pulls comments until the value specified in the configuration is reached or no more comments can be found
-                    var newComments: List<ReplyCommentNode>? = null
-                    while (size < config[RedditSpec.checks.DB.comments_amount] && newComments?.isNotEmpty() ?: true) {
-                        delay(config[RedditSpec.checks.DB.commentWaitIntervall])
-                        newComments = replaceMore(redditClient)
-                        size += newComments.size
-                    }
-                }.walkTree().toCollection(LinkedList())
+                ))
+
+                var size = UpdatedCommentNode(firstPull).totalSize()
+                //Pulls comments until the value specified in the configuration is reached or no more comments can be found
+                var newComments: List<ReplyCommentNode>? = null
+                while (size < config[RedditSpec.checks.DB.comments_amount] && newComments?.isNotEmpty() ?: true) {
+                    delay(config[RedditSpec.checks.DB.commentWaitIntervall])
+                    newComments = firstPull.replaceMore(redditClient)
+                    size += newComments.size
+                }
+
+                val commentsTree = UpdatedCommentNode(firstPull).walkTree().toCollection(LinkedList())
 
                 var sticky: Comment? = null
                 val commentHierarchy = mutableMapOf<Comment, Comment>()
                 val comments = mutableListOf<Comment>()
 
                 while (commentsTree.isNotEmpty()){
-                    val contribution = commentsTree.poll()
+                    val contribution = commentsTree.poll().let { if (it is UpdatedCommentNode<*, *>) it else UpdatedCommentNode(it as AbstractCommentNode<*>) }
                     if(contribution.subject is Comment) {
                         val comment = contribution.subject as Comment
                         if (comment.isStickied) {
@@ -81,7 +84,7 @@ class RedditCommentsFetchedFactory @Inject constructor(
                             //Comments to the stickied comment are not loaded by default, so we have to
                             //load them explicitly and add them to the list
                             contribution.loadFully(redditClient)
-                            commentsTree.addAll(contribution.replies.flatMap { it.walkTree().toList() })
+                            commentsTree.addAll(contribution.replies.flatMap { UpdatedCommentNode(it as AbstractCommentNode<*>).walkTree().toList() })
                         }
                         comments.add(comment)
                         if (contribution.depth > 1){

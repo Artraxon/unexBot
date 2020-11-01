@@ -14,6 +14,7 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import javax.inject.Inject
 import javax.inject.Named
+import javax.inject.Provider
 import kotlin.reflect.KClass
 
 typealias EventFactories = Map<KClass<*>, Pair<EventTypeFactory<*, *, *>, KClass<*>>>
@@ -46,22 +47,34 @@ interface IFlowDispatcherStub<T: Flow, F: FlowFactory<T, *>>: FlowDispatcherInte
     suspend fun <E: EventType<R>, R: Any> registerMultiplexer(type: E, multiplexer: EventMultiplexer<R>)
     fun start()
     val flowFactory: F
+    val launcherScope: CoroutineScope
+    suspend fun setupAndStartFlows(startFn: suspend T.() -> Unit, flowProvider: suspend (Provider<Callback<in FlowResult<T>, Unit>>) -> Collection<T>): Collection<Job>
 }
 
 /**
+ * Provides Basic Utilities for dispatching new flows, most Applications written using this library will probably
+ * need this Class. Decorate it to add your own functionality.
+ *
  * @param eventFactories Key is the Klass of the type, Value Consists of the corresponding Factory and the Type of the Key
+ * @param starterEventChannel upon which events to create new Flows
+ * @param flowFactory Factory for the Flows
+ * @param flowLauncherScope the scope in which to process [starterEventChannel], create and send the flows
+ * @param eventFactories Factories for all Events that should be available
  */
 class FlowDispatcherStub<T: Flow, M: Any, F: FlowFactory<T, M>> @Inject constructor (
         private val starterEventChannel: ReceiveChannel<M>,
         override val flowFactory: F,
-        @param:Named("launcherScope") private val flowLauncherScope: CoroutineScope,
-        private val eventFactories: EventFactories
+        @param:Named("launcherScope") override val launcherScope: CoroutineScope,
+        private val eventFactories: EventFactories,
+        internal val startAction: suspend T.() -> Unit = { start() }
 ): IFlowDispatcherStub<T, F> {
-    private val flows: BroadcastChannel<T>
-    private val finishedFlows: BroadcastChannel<FlowResult<T>>
+    private val flows: BroadcastChannel<T> = BroadcastChannel(Channel.CONFLATED)
+    private val finishedFlows: BroadcastChannel<FlowResult<T>> = BroadcastChannel(Channel.CONFLATED)
     private val multiplexers = mutableMapOf<EventType<*>, EventMultiplexer<*>>()
     private val job: Job
     private val logger = KotlinLogging.logger {  }
+
+    private val callbackProvider: Provider<Callback<in FlowResult<T>, Unit>> = Provider { Callback { flowResult -> launcherScope.launch { finishedFlows.send(flowResult) } } }
 
     private val runningEvents = ConcurrentHashMap<KClass<*>, ConcurrentHashMap<Any, Pair<EventType<*>, ReceiveChannel<*>>>>()
     private val eventCreationContext = Executors.newSingleThreadExecutor().asCoroutineDispatcher()
@@ -71,17 +84,15 @@ class FlowDispatcherStub<T: Flow, M: Any, F: FlowFactory<T, M>> @Inject construc
             runningEvents.put(clazz, ConcurrentHashMap())
         }
 
-        flows = BroadcastChannel(Channel.CONFLATED)
-        finishedFlows = BroadcastChannel(Channel.CONFLATED)
-        job = flowLauncherScope.launch(start = CoroutineStart.LAZY) {
+        job = launcherScope.launch(start = CoroutineStart.LAZY) {
             while(isActive) {
                 try {
                     for (event in starterEventChannel) {
                         flows.send(flowFactory.create(
                                 this@FlowDispatcherStub,
                                 event,
-                                Callback { flowResult -> flowLauncherScope.launch { finishedFlows.send(flowResult) } })
-                                .apply { start() })
+                                callbackProvider.get())
+                                .apply { startInScope { startAction() } })
                     }
                 } catch (e: Throwable) {
                     logger.warn { e.message }
@@ -89,6 +100,7 @@ class FlowDispatcherStub<T: Flow, M: Any, F: FlowFactory<T, M>> @Inject construc
             }
         }
     }
+
 
     override suspend fun <R : Any> subscribe(flow: T, callback: suspend (R) -> Unit, type: EventType<R>) {
         CoroutineScope(eventCreationContext).launch { multiplexers[type]?.addListener(flow) { callback(it as R)} }.join()
@@ -119,6 +131,14 @@ class FlowDispatcherStub<T: Flow, M: Any, F: FlowFactory<T, M>> @Inject construc
         job.join()
     }
 
+    /**
+     * Allows the creation of new events during Runtime.
+     * Keep in mind that if the event is not needed during the whole runtime, it should be unregistered using [unregisterEvent]
+     * to avoid memory leaks.
+     *
+     * If an Event is created for an individual flow, an easy way to make sure that the event is unregistered is to put the
+     * call in the callback (e.g. in the corresponding [FlowFactory] Implementation)
+     */
     override suspend fun <E : EventType<R>, R : Any, I : Any> createNewEvent(
             clazz: KClass<E>,
             id: I,
@@ -146,11 +166,38 @@ class FlowDispatcherStub<T: Flow, M: Any, F: FlowFactory<T, M>> @Inject construc
         return event.await() as E
     }
 
+    /**
+     * Removes all references to the Event Identified by the arguments.
+     * However it does not remove flows from the [EventMultiplexer]
+     */
     override suspend fun <E : EventType<R>, R : Any, I : Any> unregisterEvent(clazz: KClass<E>, id: I) {
         CoroutineScope(eventCreationContext).launch {
-            runningEvents.get(clazz)?.get(id)?.run {
+            runningEvents.get(clazz)?.remove(id)?.run {
                 multiplexers.remove(first)
             }
+        }
+    }
+
+    override suspend fun setupAndStartFlows(startFn: suspend T.() -> Unit, flowProvider: suspend (Provider<Callback<in FlowResult<T>, Unit>>) -> Collection<T>): Collection<Job> {
+        return launcherScope.async {
+            val flows = flowProvider(callbackProvider)
+            val jobs = flows.map { it.startInScope { it.startFn() } }
+            flows.forEach { this@FlowDispatcherStub.flows.send(it)}
+            return@async jobs
+        }.await()
+    }
+
+}
+
+class RelaunchableFlowDispatcherStub<T: RelaunchableFlow, M: Any, F: FlowFactory<T, M>> @Inject constructor (
+        private val flowDispatcherStub: IFlowDispatcherStub<T, F>,
+        private val flowsToLaunch: Collection<T>
+): IFlowDispatcherStub<T, F> by flowDispatcherStub{
+    private val relaunchedCompleted = CompletableDeferred<Unit>()
+    override fun start() {
+        flowDispatcherStub.launcherScope.launch {
+            flowsToLaunch.map { it.startInScope(it::relaunch) }.joinAll()
+            flowDispatcherStub.start()
         }
     }
 }

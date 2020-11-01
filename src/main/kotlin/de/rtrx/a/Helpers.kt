@@ -7,6 +7,7 @@ import com.uchuhimo.konf.Config
 import com.uchuhimo.konf.source.asTree
 import de.rtrx.a.database.Linkage
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Deferred
 import mu.KLogger
 import mu.KotlinLogging
 import net.dean.jraw.RedditClient
@@ -52,5 +53,11 @@ fun Throwable.getStackTraceString(): String{
 }
 
 fun String.toSupplier(): (Config) -> String { return { this } }
+
+fun <R> Deferred<R>.getCompletedOrNull(): R? {
+    return if(isCompleted) {
+        getCompleted()
+    } else null
+}
 
 

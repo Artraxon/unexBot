@@ -5,10 +5,17 @@ import de.rtrx.a.flow.IsolationStrategy
 import de.rtrx.a.flow.SingleFlowIsolation
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.ReceiveChannel
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import mu.KotlinLogging
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.Executors
+import java.util.concurrent.ThreadPoolExecutor
 import javax.inject.Inject
+import kotlin.coroutines.CoroutineContext
 
+private val logger = KotlinLogging.logger {  }
 interface EventMultiplexer<R: Any> {
     fun addListener(flow: Flow, fn: suspend (R) -> Unit)
 
@@ -35,25 +42,41 @@ interface EventMultiplexerBuilder<R: Any, out X: EventMultiplexer<R>, in O> {
 @JvmSuppressWildcards
 class SimpleMultiplexer<R: Any> @Inject constructor(private val origin: ReceiveChannel<@JvmSuppressWildcards R>, private val isolationStrategy: IsolationStrategy): EventMultiplexer<R> {
     private val listeners: MutableMap<Flow, ConcurrentLinkedQueue<suspend (R) -> Unit>> = ConcurrentHashMap()
+    private val accessScope: CoroutineScope = CoroutineScope(Dispatchers.Default)
+    private val mutex: Mutex = Mutex()
 
     init {
         CoroutineScope(Dispatchers.Default).launch {
             for (element in origin) {
-                listeners.forEach { flow, list ->
-                    isolationStrategy.executeEach(element, flow, list)
+                mutex.withLock {
+                    listeners.forEach { flow, list ->
+                        try {
+                            isolationStrategy.executeEach(element, flow, list)
+                        } catch (e: Throwable){
+                            logger.error { "flow threw exception: " + e.message }
+                        }
+                    }
                 }
             }
         }
     }
 
     override fun addListener(flow: Flow, fn: suspend (R) -> Unit) {
-        //No need to further synchronise it with the other parts since the Reddit API will be slower than our bot
-        listeners.getOrPut( flow, { ConcurrentLinkedQueue() }).add(fn)
+        //It would probably necessary to synchronize with a mutex since the Reddit API is very slow
+        accessScope.launch {
+            mutex.withLock {
+                listeners.getOrPut(flow, { ConcurrentLinkedQueue() }).add(fn)
+            }
+        }
     }
 
     override fun removeListeners(flow: Flow) {
-        listeners.remove(flow)
-        isolationStrategy.removeFlow(flow)
+        accessScope.launch {
+            mutex.withLock {
+                listeners.remove(flow)
+                isolationStrategy.removeFlow(flow)
+            }
+        }
     }
 
     class SimpleMultiplexerBuilder<R: Any> : @kotlin.jvm.JvmSuppressWildcards EventMultiplexerBuilder<R, @kotlin.jvm.JvmSuppressWildcards SimpleMultiplexer<R>, @kotlin.jvm.JvmSuppressWildcards ReceiveChannel<R>>{

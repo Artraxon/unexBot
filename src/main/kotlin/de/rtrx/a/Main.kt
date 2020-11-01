@@ -15,9 +15,11 @@ fun main(args: Array<String>) {
     val options = parseOptions(args)
     val configPath = options.get("configPath") as String? ?: ""
     val useDB = options.get("useDB") as Boolean? ?: true
+    val restart = options.get("restart") as Boolean? ?: true
+
     val injector = Guice.createInjector(
-            CoreModule(initConfig(configPath, RedditSpec, DBSpec), useDB, PostgresSQLinkage::class),
-            UnexFlowModule())
+            CoreModule(initConfig(configPath, RedditSpec, DBSpec), useDB),
+            UnexFlowModule(restart))
 
     injector.getInstance(DDL::class.java).init(
             createDDL = (options.get("createDDL") as Boolean?) ?: true,

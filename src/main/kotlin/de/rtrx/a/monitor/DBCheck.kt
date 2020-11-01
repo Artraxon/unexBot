@@ -3,6 +3,7 @@ package de.rtrx.a.monitor
 import com.uchuhimo.konf.Config
 import de.rtrx.a.RedditSpec
 import de.rtrx.a.database.Linkage
+import de.rtrx.a.database.ObservationLinkage
 import de.rtrx.a.flow.events.comments.FullComments
 import de.rtrx.a.flow.events.comments.ManuallyFetchedEvent
 import kotlinx.coroutines.delay
@@ -23,13 +24,12 @@ class DBCheck(
         submission: SubmissionReference,
         botComment: Comment?,
         private val config: Config,
-        private val linkage: Linkage,
+        private val linkage: ObservationLinkage,
         private val redditClient: RedditClient,
         private val commentEvent: ManuallyFetchedEvent
 ) : Check(submission, botComment), IDBCheck {
 
     override suspend fun start() {
-        //TODO make this an external class and more configurable via the Config
         for (i in 1..config[RedditSpec.checks.DB.forTimes]) {
             try {
                 delay(config[RedditSpec.checks.DB.every])
@@ -72,7 +72,7 @@ interface IDBCheckBuilder: MonitorBuilder<IDBCheck> {
 }
 class DBCheckBuilder @Inject constructor(
         private val config: Config,
-        private val linkage: Linkage,
+        private val linkage: ObservationLinkage,
         private val redditClient: RedditClient
 ): IDBCheckBuilder {
     private var botComment: Comment? = null
@@ -94,7 +94,7 @@ class DBCheckBuilder @Inject constructor(
 }
 class DBCheckFactory @Inject constructor(
         private val config: Config,
-        private val linkage: Linkage,
+        private val linkage: ObservationLinkage,
         private val redditClient: RedditClient
 ): Provider<IDBCheckBuilder> {
     override fun get(): IDBCheckBuilder {

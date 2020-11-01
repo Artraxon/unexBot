@@ -30,12 +30,15 @@ fun Boolean.toBooleable() = object : Booleable {
         get() = this@toBooleable
 }
 data class CheckSelectResult(public val checkResult: Booleable, public val dbResult: Booleable, public val exception: Throwable?)
-interface Linkage {
-    val connection: Connection
 
+fun interface ConversationLinkage {
     /**
      * @return The amount of rows changed in the DB
      */
+    fun saveCommentMessage(submission_id: String, message: Message, comment: Comment): Int
+}
+interface ObservationLinkage: Linkage {
+
     fun insertSubmission(submission: Submission): Int
 
     /**
@@ -44,7 +47,6 @@ interface Linkage {
         return createCheck(getSubmissionJson(submission_fullname), botComment, stickied_comment, top_comments)
     }
 
-    fun getSubmissionJson(submissionFullname: String): JsonObject
 
 
     fun <T: Booleable> createCheckSelectValues(
@@ -67,19 +69,18 @@ interface Linkage {
         }
     }
 
-    /**
-     * @return The amount of rows changed in the DB
-     */
-    fun commentMessage(submission_id: String, message: Message, comment: Comment): Int
-
 
     fun createCheck(jsonData: JsonObject, botComment: Comment?, stickied_comment: Comment?, top_comments: Array<Comment>): Pair<Boolean, List<Comment>>
 
     fun add_parent(child: String, parent: String): Boolean
+}
+interface Linkage {
+    val connection: Connection
 
+    fun getSubmissionJson(submissionFullname: String): JsonObject
 }
 
-class DummyLinkage:Linkage {
+class DummyLinkage:Linkage, ConversationLinkage, ObservationLinkage {
     override fun insertSubmission(submission: Submission): Int = 1
 
     override fun createCheck(
@@ -93,7 +94,7 @@ class DummyLinkage:Linkage {
         return JsonObject()
     }
 
-    override fun commentMessage(submission_id: String, message: Message, comment: Comment) = 1
+    override fun saveCommentMessage(submission_id: String, message: Message, comment: Comment) = 1
     override fun add_parent(child: String, parent: String): Boolean {
         return true
     }
@@ -104,7 +105,7 @@ class DummyLinkage:Linkage {
     class DummyException: Throwable("Tried to access the sql connection on a dummy")
 }
 
-class PostgresSQLinkage @Inject constructor(private val redditClient: RedditClient, private val config: Config): Linkage {
+class PostgresSQLinkage @Inject constructor(private val redditClient: RedditClient, private val config: Config): Linkage, ConversationLinkage, ObservationLinkage {
     private val logger = KotlinLogging.logger {  }
     override val connection: Connection = run {
         val properties = Properties()
@@ -194,7 +195,7 @@ class PostgresSQLinkage @Inject constructor(private val redditClient: RedditClie
     override fun getSubmissionJson(submissionFullname: String) = redditClient.getSubmissionJson(submissionFullname)
 
 
-    override fun commentMessage(submission_id: String, message: Message, comment: Comment): Int{
+    override fun saveCommentMessage(submission_id: String, message: Message, comment: Comment): Int{
 
         val pst = connection.prepareStatement("SELECT * FROM comment_with_message(?, ?, ?, ?, ?, ?, ?, ?)")
         pst.setString(1, submission_id)

@@ -14,18 +14,8 @@ import java.sql.Types
 import java.time.OffsetDateTime
 import javax.inject.Inject
 
-class NormLinkage @Inject constructor(private val delegateLinkage: PostgresSQLinkage, private val redditClient: RedditClient) : Linkage {
+class NormLinkage @Inject constructor(private val delegateLinkage: PostgresSQLinkage, private val redditClient: RedditClient) : ObservationLinkage by delegateLinkage{
 private val logger = KotlinLogging.logger {  }
-    override val connection: Connection
-        get() = delegateLinkage.connection
-
-    override fun add_parent(child: String, parent: String): Boolean {
-        return delegateLinkage.add_parent(child, parent)
-    }
-
-    override fun commentMessage(submission_id: String, message: Message, comment: Comment): Int {
-        return delegateLinkage.commentMessage(submission_id, message, comment)
-    }
 
     override fun createCheck(jsonData: JsonObject, botComment: Comment?, stickied_comment: Comment?, topComments: Array<Comment>): Pair<Boolean, List<Comment>>{
         val submission_fullname = jsonData.get("name")?.asString ?: return false to emptyList()
@@ -38,7 +28,7 @@ private val logger = KotlinLogging.logger {  }
         val score = jsonData.get("score")?.asInt
         val unexScore = if(botComment != null)(redditClient.lookup(botComment.fullName)[0] as Comment).score else null
 
-        val pst = connection.prepareStatement("SELECT * FROM create_check(?, ?, (to_json(?::json)), (to_json(?::json)), ?, ?, ?, ?, ?, ?, ?, ?)")
+        val pst = delegateLinkage.connection.prepareStatement("SELECT * FROM create_check(?, ?, (to_json(?::json)), (to_json(?::json)), ?, ?, ?, ?, ?, ?, ?, ?)")
         pst.setString(1, submission_fullname.drop(3))
         pst.setObject(2, OffsetDateTime.now(), Types.TIMESTAMP_WITH_TIMEZONE)
         pst.setString(3, userReports?.toString())
@@ -78,11 +68,4 @@ private val logger = KotlinLogging.logger {  }
         }
     }
 
-    override fun getSubmissionJson(submissionFullname: String): JsonObject {
-        return delegateLinkage.getSubmissionJson(submissionFullname)
-    }
-
-    override fun insertSubmission(submission: Submission): Int {
-        return delegateLinkage.insertSubmission(submission)
-    }
 }

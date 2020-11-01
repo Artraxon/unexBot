@@ -4,10 +4,12 @@ import com.google.inject.Inject
 import com.google.inject.Provider
 import com.google.inject.assistedinject.Assisted
 import com.google.inject.assistedinject.AssistedInject
+import com.google.inject.name.Named
 import com.uchuhimo.konf.Config
 import de.rtrx.a.RedditSpec
 import de.rtrx.a.database.Booleable
 import de.rtrx.a.database.Linkage
+import de.rtrx.a.database.ObservationLinkage
 import kotlinx.coroutines.*
 import kotlinx.coroutines.selects.SelectClause1
 import kotlinx.coroutines.selects.select
@@ -18,18 +20,25 @@ import net.dean.jraw.models.Message
 import net.dean.jraw.models.Submission
 import net.dean.jraw.references.CommentReference
 import net.dean.jraw.references.PublicContributionReference
-import javax.inject.Named
 
 typealias MessageCheck = (Message) -> Boolean
 interface DeletePrevention{
     suspend fun check(publicRef: PublicContributionReference): DelayedDelete.DeleteResult
 }
 
-class Callback<T, R>(private val action: (T) -> R) : (T) -> R{
+class Callback<T, R>(private var action: (T) -> R) : (T) -> R{
     private var wasCalled = false
     override operator fun invoke(value: T): R {
         if(wasCalled == true) throw CallbackAlreadyCalledException()
         else return action(value)
+    }
+
+    fun addAction(action: (T) -> R){
+        val currentAction = this.action
+        this.action = { t ->
+            currentAction(t)
+            action(t)
+        }
     }
 
     class CallbackAlreadyCalledException : Throwable("Callback was already called")
@@ -37,19 +46,36 @@ class Callback<T, R>(private val action: (T) -> R) : (T) -> R{
 }
 
 interface Conversation {
+    /**
+     * Setup the conversation
+     * @param check A Predicate for identifiying the starting Message of the conversation
+     */
     suspend fun CoroutineScope.waitForCompletion(check: MessageCheck): Message
+
+    /**
+     * Takes in messages, that are checked and if matched are saved as the origin of the conversation
+     */
     suspend fun start(message: Message)
+
+    /**
+     * Takes in messages, that are checked if they are a reply to the message matched by [start]
+     */
     suspend fun reply(message: Message)
+
+
 }
 
+interface JumpstartConversation <R> : Conversation {
+    suspend fun jumpstart(id: R)
+}
 class DefferedConversationProvider @Inject constructor (
         private val config: Config
-): Provider<Conversation> { override fun get() = DefferedConversation(config) }
+): Provider<JumpstartConversation<String>> { override fun get() = DefferedConversation(config) }
 
 class DefferedConversation @Inject constructor(
         private val config: Config
-) : Conversation{
-    private val defferedOwnMessage: CompletableDeferred<Message> = CompletableDeferred()
+) : JumpstartConversation<String>{
+    private val defferedOwnMessage: CompletableDeferred<String> = CompletableDeferred()
     val ownMessage get() = defferedOwnMessage.getCompleted()
 
     private val defferedReply: CompletableDeferred<Message> = CompletableDeferred()
@@ -57,6 +83,7 @@ class DefferedConversation @Inject constructor(
 
     private val deferredScope: CompletableDeferred<CoroutineScope> = CompletableDeferred()
     private lateinit var checkMessage: (Message) -> Boolean
+
 
     override suspend fun CoroutineScope.waitForCompletion(check: MessageCheck): Message {
         deferredScope.complete(this)
@@ -67,7 +94,7 @@ class DefferedConversation @Inject constructor(
     override suspend fun start(message: Message) {
         deferredScope.await().launch {
             if(checkMessage(message)){
-                defferedOwnMessage.complete(message)
+                defferedOwnMessage.complete(message.fullName)
             }
         }
     }
@@ -77,13 +104,19 @@ class DefferedConversation @Inject constructor(
             val proceed = select<Boolean> {
                 defferedOwnMessage.onAwait { true }
                 defferedReply.onAwait { false }
-                onTimeout(config[RedditSpec.messages.unread.maxTimeDistance]) { false }
+                onTimeout(config[RedditSpec.messages.sent.maxWaitForCompletion]) { false }
             }
             if(proceed){
-                if(message.firstMessage == ownMessage.fullName){
+                if(message.firstMessage == ownMessage){
                     defferedReply.complete(message)
                 }
             }
+        }
+    }
+
+    override suspend fun jumpstart(id: String) {
+        deferredScope.await().launch {
+            defferedOwnMessage.complete(id)
         }
     }
 
@@ -127,7 +160,7 @@ class RedditMessageComposer @Inject constructor(
                 subject = config[RedditSpec.messages.sent.subject],
                 body = config[RedditSpec.messages.sent.body]
                         .replace("%{Submission}", postURL)
-                        .replace("%{HoursUntilDrop}", (config[RedditSpec.messages.sent.timeSaved] / (1000 * 60 * 60)).toString())
+                        .replace("%{HoursUntilDrop}", (config[RedditSpec.messages.sent.maxTimeDistance] / (1000 * 60 * 60)).toString())
                         .replace("%{subreddit}", config[RedditSpec.subreddit])
                         .replace("%{MinutesUntilRemoval}", (config[RedditSpec.scoring.timeUntilRemoval] / (1000 * 60)).toString())
         )
@@ -166,7 +199,7 @@ class RedditUnignorer @Inject constructor(
 }
 
 interface DelayedDeleteFactory{
-    fun create(publicContribution: PublicContributionReference, scope: CoroutineScope): DelayedDelete
+    fun create(publicContribution: PublicContributionReference, scope: CoroutineScope, skip: Long): DelayedDelete
 }
 
 /**
@@ -182,7 +215,7 @@ interface DelayedDelete {
     suspend fun safeSelectTo(clause1: SelectClause1<Any?>): DeleteResult
 
     companion object {
-        val approvedCheck: (Linkage) -> DeletePrevention = { linkage -> object : DeletePrevention
+        val approvedCheck: (ObservationLinkage) -> DeletePrevention = { linkage -> object : DeletePrevention
             {
                 override suspend fun check(publicRef: PublicContributionReference): DeleteResult {
                     return linkage.createCheckSelectValues(
@@ -207,17 +240,24 @@ interface DelayedDelete {
 }
 
 class RedditDelayedDelete @AssistedInject constructor(
-        @param:Named("delayToDeleteMillis") private val delayToDeleteMillis: Long,
-        @param:Named("delayToFinishMillis") private val delayToFinishMillis: Long,
-        private val linkage: Linkage,
+        @Named("delayToDeleteMillis") delayToDeleteMillis: Long,
+        @Named("delayToFinishMillis") delayToFinishMillis: Long,
         private val unignorer: Unignorer,
         private val preventsDeletion: @JvmSuppressWildcards DeletePrevention,
         @param:Assisted private val publicContribution: PublicContributionReference,
-        @param:Assisted private val scope: CoroutineScope
+        @param:Assisted private val scope: CoroutineScope,
+        @param:Assisted private val skip: Long
 ): DelayedDelete {
     val removeSubmission = remove()
     lateinit var deletionJob: Deferred<DelayedDelete.DeleteResult>
 
+    private val delayToDeleteMillis: Long
+    private val delayToFinishMillis: Long
+
+    init {
+        this.delayToDeleteMillis = (delayToDeleteMillis - skip).coerceAtLeast(0)
+        this.delayToFinishMillis = (delayToFinishMillis - (delayToDeleteMillis - skip)).coerceAtLeast(0)
+    }
     override fun start() {
         deletionJob = scope.async {
             try {
@@ -271,3 +311,4 @@ class RedditDelayedDelete @AssistedInject constructor(
 
 class SubmissionAlreadyPresent<T: Flow>(finishedFlow: T) : FlowResult.NotFailedEnd<T>(finishedFlow)
 class NoAnswerReceived<T: Flow>(finishedFlow: T) : FlowResult.NotFailedEnd<T>(finishedFlow)
+

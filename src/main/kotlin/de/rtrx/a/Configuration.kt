@@ -53,8 +53,8 @@ object RedditSpec: ConfigSpec("reddit") {
 
     object messages : ConfigSpec("messages") {
         object sent: ConfigSpec("sent") {
-            val timeSaved by required<Long>()
             val maxTimeDistance by required<Long>()
+            val maxWaitForCompletion by required<Long>()
             val limit by required<Int>()
             val waitIntervall by required<Long>()
             val subject by required<String>()
@@ -62,7 +62,6 @@ object RedditSpec: ConfigSpec("reddit") {
         }
 
         object unread: ConfigSpec("unread"){
-            val maxTimeDistance by required<Long>()
             val waitIntervall by required<Long>()
             val limit by required<Int>()
             val answerMaxCharacters by required<Int>()
@@ -101,7 +100,8 @@ private val availableOptions: Map<String, Pair<(String)-> Boolean, (String) -> A
         "createDBFunctions" to (verifyBoolean to convertBoolean),
         "configPath" to ({it: String -> true} to {str: String -> str}),
         "useDB" to (verifyBoolean to convertBoolean),
-        "startDispatcher" to (verifyBoolean to convertBoolean)
+        "startDispatcher" to (verifyBoolean to convertBoolean),
+        "restart" to (verifyBoolean to convertBoolean)
 )
 
 fun parseOptions(args: Array<String>): Map<String, Any>{
