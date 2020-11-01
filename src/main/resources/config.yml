@@ -16,8 +16,8 @@ reddit:
 
   messages:
     sent:
-      timeSaved: 7200000
-      maxTimeDistance: 900000
+      maxTimeDistance: 7200000
+      maxWaitForCompletion: 20000
       limit: 25
       waitIntervall: 5000
       subject: Please explain what is unexpected in your submission
@@ -33,7 +33,6 @@ reddit:
         *****
         [*Look at my source code on GitHub*](https://github.com/Artraxon/unexBot)
     unread:
-      maxTimeDistance: 300000
       waitIntervall: 5000
       limit: 25
       answerMaxCharacters: 500
