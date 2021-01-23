@@ -175,7 +175,7 @@ class RedditReplyer @Inject constructor(
         val comment = submission.toReference(redditClient)
                 .reply(config[RedditSpec.scoring.commentBody].replace("%{Reason}",
                         //Prevents People from breaking the spoiler tag
-                        reason.take(config[RedditSpec.messages.unread.answerMaxCharacters]).replace("\n\n","  \n")))
+                        reason.take(config[RedditSpec.messages.unread.answerMaxCharacters]).replace("\n\n","  \n").trim()))
         return comment to comment.toReference(redditClient)
     }
 }
