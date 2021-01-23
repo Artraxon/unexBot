@@ -1,6 +1,6 @@
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
-project.version = "2.2.2"
+project.version = "2.3.1"
 plugins {
     id("org.jetbrains.kotlin.jvm") version "1.4.0"
 
@@ -100,7 +100,7 @@ publishing {
     }
     publications {
         register<MavenPublication>("gpr") {
-            artifactId = "unexBot"
+            artifactId = "unexbot"
             groupId = "de.rtrx.a"
             from(components["kotlin"])
         }
