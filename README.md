@@ -64,7 +64,7 @@ This program uses different libraries:
 
 - [JRAW](https://github.com/mattbdean/JRAW) is probably the most important one. I even stole an 1 and a halve class from it (Rotating Search List and SuspendableStream), since the original implementation blocks the thread. Maybe someday I will find the time to create a pull request to JRAW to include this (or create my own fork of it and properly integrate it)
 - SLF4J for logging
-- [Gson](https://github.com/google/gson): For parsing some data since I'm to stupid to change the appropriate classes of JRAW.
+- [Gson](https://github.com/google/gson): For parsing some data since I'm too stupid to change the appropriate classes of JRAW.
 - [Kotlin Logging](https://github.com/MicroUtils/kotlin-logging): A wrapper around SLF4J (which itself is a wrapper around a logging backend).
 - [Konf](https://github.com/uchuhimo/konf): For the configuration system.
 - [The PostgreSQL JDBC Driver](https://jdbc.postgresql.org).
