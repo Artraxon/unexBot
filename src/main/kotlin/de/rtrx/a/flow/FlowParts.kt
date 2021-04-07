@@ -155,11 +155,21 @@ class RedditMessageComposer @Inject constructor(
         private val config: Config
 ): MessageComposer {
     override fun invoke(author: String, postURL: String) {
+        fun decideS(time: Long, unit: Long) = if((time / unit)> 1) "s" else ""
+        fun decideUnit(time: Long) =
+                if(time < 60) time.toString() + " second" + decideS(time, 1)
+                else if(time < 60*60) (time / 60).toString() + " minute" + decideS(time, 60)
+                else (time / (60*60)).toString() + " hour" + decideS(time, 60*60)
+
+        val timeToDrop = (config[RedditSpec.messages.sent.maxTimeDistance] / (1000))
+        val timeToDelete = (config[RedditSpec.scoring.timeUntilRemoval] / 1000)
         redditClient.me().inbox().compose(
                 dest = author,
                 subject = config[RedditSpec.messages.sent.subject],
                 body = config[RedditSpec.messages.sent.body]
                         .replace("%{Submission}", postURL)
+                        .replace("%{TimeUntilDrop}", decideUnit(timeToDrop))
+                        .replace("%{TimeUntilRemoval}", decideUnit(timeToDelete))
                         .replace("%{HoursUntilDrop}", (config[RedditSpec.messages.sent.maxTimeDistance] / (1000 * 60 * 60)).toString())
                         .replace("%{subreddit}", config[RedditSpec.subreddit])
                         .replace("%{MinutesUntilRemoval}", (config[RedditSpec.scoring.timeUntilRemoval] / (1000 * 60)).toString())
