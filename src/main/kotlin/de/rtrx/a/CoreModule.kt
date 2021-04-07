@@ -98,7 +98,7 @@ class CoreModule(private val config: Config, private val useDB: Boolean) : Kotli
         bind(Long::class.java).annotatedWith(Names.named("delayToDeleteMillis")).toInstance(config[RedditSpec.scoring.timeUntilRemoval])
         bind(Long::class.java)
                 .annotatedWith(Names.named("delayToFinishMillis"))
-                .toInstance(config[RedditSpec.messages.sent.maxTimeDistance] - config[RedditSpec.scoring.timeUntilRemoval])
+                .toInstance(config[RedditSpec.messages.sent.maxTimeDistance])
     }
     fun initReddit(): RedditClient {
 
