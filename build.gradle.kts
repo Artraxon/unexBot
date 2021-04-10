@@ -6,8 +6,7 @@ plugins {
 
     application
     id("com.github.johnrengelman.shadow") version("5.1.0")
-    id ("com.bmuschko.docker-remote-api") version("5.2.0")
-    id("com.bmuschko.docker-java-application") version "5.2.0"
+    id("com.google.cloud.tools.jib") version "2.8.0"
     `maven-publish`
 
 }
@@ -38,8 +37,6 @@ dependencies {
     testImplementation("com.nhaarman.mockitokotlin2:mockito-kotlin:2.2.0")
     testImplementation( "org.mockito:mockito-inline:2.13.0")
 
-
-
     implementation("io.github.microutils:kotlin-logging:1.5.9")
     implementation("com.uchuhimo:konf-core:0.20.0")
     implementation("com.uchuhimo:konf-yaml:0.20.0")
@@ -64,48 +61,16 @@ tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile::class.java).all 
     }
 }
 
-docker {
-
-    registryCredentials {
-        val GITHUB_USER: String by project
-        val GITHUB_TOKEN: String by project
-
-        username.set(GITHUB_USER)
-        password.set(GITHUB_TOKEN)
-        url.set("docker.pkg.github.com")
-    }
-
-    javaApplication {
-        //TODO Find a better way to configure logging
-        //this.jvmArgs.set(listOf("-Djava.util.logging.config.file=/app/resources/logging.properties]"))
-        ports.set(listOf<Int>())
-        baseImage.set("openjdk:8")
-        maintainer.set("Artraxon a@rtrx.de")
-        tag.set("docker.pkg.github.com/artraxon/unexbot/full-image:${project.version}")
-    }
-}
-publishing {
-    repositories {
-        maven {
-            name = "GitHubPackages"
-            url = uri("https://maven.pkg.github.com/artraxon/unexbot")
-            credentials {
-                val GITHUB_USER: String by project
-                val GITHUB_TOKEN: String by project
-
-                username = GITHUB_USER
-                password = GITHUB_TOKEN
-            }
-        }
-    }
-    publications {
-        register<MavenPublication>("gpr") {
-            artifactId = "unexbot"
-            groupId = "de.rtrx.a"
-            from(components["kotlin"])
+jib {
+    to {
+        image = "docker.pkg.github.com/artraxon/unexbot/full-image:${project.version}"
+        auth {
+            username = System.getenv("GITHUB_USER")
+            password = System.getenv("GITHUB_TOKEN")
         }
     }
 }
+
 val compileKotlin: KotlinCompile by tasks
 compileKotlin.kotlinOptions {
     jvmTarget = "1.8"
