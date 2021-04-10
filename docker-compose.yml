@@ -1,0 +1,23 @@
+version: '3'
+
+services:
+  postgres:
+    image: postgres
+    restart: always
+    ports:
+        - 5432
+    volumes:
+        - ./docker/data/unexDB:/var/lib/postgresql
+    environment:
+        - POSTGRES_USER=unex
+        - POSTGRES_PASSWORD=testPassword
+        - POSTGRES_DB=unexdb
+
+  unexBot:
+    image: docker.pkg.github.com/artraxon/unexbot/full-image:2.3.2
+    container_name: unexbot
+    restart: always
+    command: createDDL=false createDBFunctions=false configPath=config.ym restart=true
+    volumes:
+        - ./testEnvironment/config.yml:/app/resources/config.yml
+        - ./testEnvironment/logging.properties:/app/resources/logging.properties
