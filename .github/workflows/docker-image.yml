@@ -1,0 +1,21 @@
+name: docker-image
+on:
+  push:
+    tags:
+      - '**'
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Set up Java
+        uses: actions/setup-java@v2
+        with:
+          java-version: '11'
+          distribution: 'adopt'
+      - name: Run Jib Task
+        run: gradle jib
+        env:
+          GITHUB_USER: ${{ secrets.USER }}
+          GITHUB_TOKEN: ${{ secrets.TOKEN }}
