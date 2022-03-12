@@ -1,6 +1,8 @@
 # unexBot
 
 A small bot for Reddit that filters out (some) of the rubbish and collects data for analyzing submissions.
+It also includes a framework for expressing a concurrent actor with sequential coroutines.
+As moving the framework to a seperate repository is a WIP, you'll find below only a description on how to use the bot.
 
 ## What does this bot do?
 
